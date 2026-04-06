@@ -19,6 +19,10 @@ export interface Config {
   lootboxRoot?: string;
   lootboxDataDir?: string;
   mcpServers?: Record<string, McpServerConfig>;
+
+  // Execution settings
+  timeout?: number; // Script execution timeout in milliseconds (default: 10000)
+  sandbox?: boolean; // Enable sandbox mode (default: true). When false, scripts run with full permissions.
 }
 
 export interface FlowState {

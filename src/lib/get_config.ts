@@ -16,6 +16,8 @@ interface ResolvedConfig {
   port: number;
   lootbox_data_dir: string | null;
   mcp_servers: Record<string, McpServerConfig> | null;
+  timeout: number;
+  sandbox: boolean;
 }
 
 async function loadConfig(): Promise<Config> {
@@ -29,7 +31,8 @@ async function loadConfig(): Promise<Config> {
 
 export const get_config = async (): Promise<ResolvedConfig> => {
   const args = parseArgs(Deno.args, {
-    string: ["lootbox-root", "port", "lootbox-data-dir"],
+    string: ["lootbox-root", "port", "lootbox-data-dir", "timeout"],
+    boolean: ["sandbox", "no-sandbox"],
     alias: {
       "lootbox-root": "r",
       port: "p",
@@ -97,6 +100,27 @@ export const get_config = async (): Promise<ResolvedConfig> => {
     Deno.exit(1);
   }
 
+  // Resolve timeout: CLI flag > config file > default (10000ms)
+  const timeoutStr = args.timeout as string | undefined;
+  let timeout = 10000;
+  if (timeoutStr) {
+    timeout = parseInt(timeoutStr, 10);
+    if (isNaN(timeout) || timeout <= 0) {
+      console.error("Error: --timeout must be a positive number (milliseconds)");
+      Deno.exit(1);
+    }
+  } else if (config.timeout !== undefined) {
+    timeout = config.timeout;
+  }
+
+  // Resolve sandbox: --no-sandbox flag > config file > default (true)
+  let sandbox = true;
+  if (args["no-sandbox"]) {
+    sandbox = false;
+  } else if (config.sandbox !== undefined) {
+    sandbox = config.sandbox;
+  }
+
   return {
     lootbox_root: lootboxRoot,
     tools_dir: toolsDir,
@@ -105,5 +129,7 @@ export const get_config = async (): Promise<ResolvedConfig> => {
     port: port,
     lootbox_data_dir: lootboxDataDir,
     mcp_servers: mcpServers,
+    timeout,
+    sandbox,
   };
 };

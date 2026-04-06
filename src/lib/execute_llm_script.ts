@@ -23,17 +23,29 @@ export const execute_llm_script = async (args: { script: string; sessionId?: str
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutMs = config.timeout;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    // Build deno command args based on sandbox setting
+    const denoArgs: string[] = ["run"];
+
+    if (config.sandbox) {
+      // Sandboxed: only allow network access
+      denoArgs.push("--allow-net");
+    } else {
+      // Unsandboxed: full permissions
+      denoArgs.push("--allow-all");
+    }
+
+    denoArgs.push(
+      `--allow-import=localhost:${config.port}`,
+      `--reload=http://localhost:${config.port}/client.ts`,
+      "--no-check=remote",
+      tempFile,
+    );
 
     const { success, stdout, stderr } = await new Deno.Command("deno", {
-      args: [
-        "run",
-        "--allow-net", // Only allow network access for user scripts (sandboxed)
-        `--allow-import=localhost:${config.port}`, // Allow importing from local RPC server
-        `--reload=http://localhost:${config.port}/client.ts`, // Force reload client on each execution
-        "--no-check=remote", // Don't check remote imports
-        tempFile,
-      ],
+      args: denoArgs,
       stdout: "piped",
       stderr: "piped",
       signal: controller.signal,
@@ -92,7 +104,8 @@ export const execute_llm_script = async (args: { script: string; sessionId?: str
     const durationMs = Date.now() - startTime;
 
     if (error instanceof Error && error.name === "AbortError") {
-      const errorMsg = "Script execution timeout (10 seconds)";
+      const timeoutSec = config.timeout / 1000;
+      const errorMsg = `Script execution timeout (${timeoutSec} seconds)`;
 
       // Save timeout run
       await saveScriptRun({

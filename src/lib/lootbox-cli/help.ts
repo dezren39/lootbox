@@ -26,8 +26,8 @@ AVAILABLE APIS:
     .raw()                          Returns raw input
 
 CONSTRAINTS:
-  • 10 second execution timeout
-  • Sandboxed execution for safety
+  • Configurable execution timeout (default: 10 seconds)
+  • Sandboxed execution for safety (configurable via config or --no-sandbox)
 
 EXAMPLES:
   # Discover and use tools
@@ -75,8 +75,8 @@ Usage:
 Execution Environment:
   • Runtime: Deno sandbox with TypeScript support
   • Network: fetch() available for HTTP requests
-  • Sandbox: Direct file system and environment access disabled
-  • Timeout: 10 second execution limit
+  • Sandbox: Direct file system and environment access disabled (configurable)
+  • Timeout: Configurable execution limit (default: 10 seconds)
   • Global APIs: console, fetch, Promise, standard JavaScript/TypeScript APIs
 
 Function Library (tools object):
@@ -180,6 +180,8 @@ Example:
   {
     "port": 3000,
     "lootboxRoot": ".lootbox",
+    "timeout": 30000,
+    "sandbox": false,
     "mcpServers": {
       "filesystem": {
         "command": "npx",
@@ -195,6 +197,11 @@ Settings:
                     Contains: tools/, workflows/, scripts/
   lootboxDataDir    Internal data directory (default: ~/.local/share/lootbox)
   mcpServers        MCP server definitions (command, args, env)
+  timeout           Script execution timeout in milliseconds (default: 10000)
+                    CLI: --timeout <ms>
+  sandbox           Enable sandboxed execution (default: true)
+                    When false, scripts run with full Deno permissions (--allow-all)
+                    CLI: --no-sandbox
 
 Priority (for all settings):
   CLI flags > config file > defaults

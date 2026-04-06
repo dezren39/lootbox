@@ -86,7 +86,8 @@ export class TypeGeneratorManager {
    */
   async generateClientCode(
     port: number,
-    mcpSchemas?: McpServerSchemas[]
+    mcpSchemas?: McpServerSchemas[],
+    timeout?: number
   ): Promise<string> {
     const uniqueFiles = this.rpcCacheManager.getUniqueFiles();
 
@@ -99,7 +100,7 @@ export class TypeGeneratorManager {
 
     const options = {
       websocketUrl: `ws://localhost:${port}/ws`,
-      timeout: 10000,
+      timeout: timeout ?? 10000,
       clientClassName: "RpcClient",
       includeInterfaces: true,
     };
