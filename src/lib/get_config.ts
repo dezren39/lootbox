@@ -444,7 +444,6 @@ export const get_config = async (): Promise<ResolvedConfig> => {
 
   // --- Return ---------------------------------------------------------
   return {
-    lootbox_root: lootboxRoot,
     tools_dir: toolsDir,
     workflows_dir: workflowsDir,
     scripts_dir: scriptsDir,

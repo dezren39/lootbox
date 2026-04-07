@@ -180,7 +180,6 @@ export interface Config {
 /** Fully resolved, validated configuration used at runtime. */
 export interface ResolvedConfig {
   // Paths
-  lootbox_root: string;
   tools_dir: string;
   workflows_dir: string;
   scripts_dir: string;
