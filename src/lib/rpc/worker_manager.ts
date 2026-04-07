@@ -2,7 +2,9 @@
 
 import type { RpcFile } from "./load_rpc_files.ts";
 
-// Inline worker code to avoid path resolution issues in compiled binaries
+// ── Inline worker fallback ───────────────────────────────────────────
+// Used only when the source rpc_worker.ts cannot be located at runtime
+// (e.g. inside a `deno compile`d binary).  Keep in sync with rpc_worker.ts.
 const RPC_WORKER_CODE = `
 // RPC Worker - Long-running process that executes RPC functions
 // One worker per RPC file, communicates with main server via WebSocket
@@ -242,15 +244,54 @@ export class WorkerManager {
     this.workerWsPath = config.workerWsPath;
   }
 
+  /** Cached path to the worker script (resolved once per process). */
+  private _workerScriptPath: string | null = null;
+
+  /**
+   * Resolve the path to the worker script.
+   * Prefers the canonical rpc_worker.ts; falls back to writing the
+   * embedded RPC_WORKER_CODE to a temp file for compiled-binary mode.
+   */
+  private async resolveWorkerScript(): Promise<string> {
+    if (this._workerScriptPath) return this._workerScriptPath;
+
+    // Try to find rpc_worker.ts relative to this module
+    const candidates = [
+      new URL("./rpc_worker.ts", import.meta.url),
+    ];
+    for (const candidate of candidates) {
+      try {
+        // file:// URLs work with Deno.stat
+        const path = candidate.protocol === "file:"
+          ? candidate.pathname
+          : candidate.href;
+        await Deno.stat(path);
+        this._workerScriptPath = path;
+        return path;
+      } catch {
+        // Not found, try next
+      }
+    }
+
+    // Fallback: write embedded code to a temp file
+    const tempFile = await Deno.makeTempFile({
+      prefix: "lootbox_worker_",
+      suffix: ".ts",
+    });
+    await Deno.writeTextFile(tempFile, RPC_WORKER_CODE);
+    this._workerScriptPath = tempFile;
+    return tempFile;
+  }
+
   /**
    * Start a worker process for an RPC file
    */
   async startWorker(file: RpcFile): Promise<void> {
     const workerId = file.name;
 
-    // Write worker code to temp file
-    const tempFile = await Deno.makeTempFile({ prefix: "lootbox_worker_", suffix: ".ts" });
-    await Deno.writeTextFile(tempFile, RPC_WORKER_CODE);
+    // Prefer the canonical rpc_worker.ts source file; fall back to the
+    // embedded string when the file can't be found (compiled binary).
+    const workerScript = await this.resolveWorkerScript();
 
     // Spawn worker process
     const workerWsUrl = `ws://localhost:${this.port}${this.workerWsPath}`;
@@ -258,7 +299,7 @@ export class WorkerManager {
       args: [
         "run",
         "--allow-all",
-        tempFile,
+        workerScript,
         file.path,
         workerWsUrl,
         workerId,
