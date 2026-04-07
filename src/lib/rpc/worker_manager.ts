@@ -629,4 +629,51 @@ export class WorkerManager {
 
     this.workers.clear();
   }
+
+  /**
+   * Get aggregate worker health status for the deep health endpoint.
+   */
+  getHealthStatus(): {
+    status: "ok" | "degraded" | "unhealthy";
+    total: number;
+    ready: number;
+    failed: number;
+    crashed: number;
+    starting: number;
+  } {
+    let ready = 0;
+    let failed = 0;
+    let crashed = 0;
+    let starting = 0;
+
+    for (const worker of this.workers.values()) {
+      switch (worker.status) {
+        case "ready":
+          ready++;
+          break;
+        case "failed":
+          failed++;
+          break;
+        case "crashed":
+          crashed++;
+          break;
+        case "starting":
+          starting++;
+          break;
+      }
+    }
+
+    const total = this.workers.size;
+
+    let status: "ok" | "degraded" | "unhealthy";
+    if (total === 0 || ready === total) {
+      status = "ok";
+    } else if (ready > 0) {
+      status = "degraded";
+    } else {
+      status = "unhealthy";
+    }
+
+    return { status, total, ready, failed, crashed, starting };
+  }
 }
