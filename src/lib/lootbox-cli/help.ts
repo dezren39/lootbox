@@ -1,3 +1,5 @@
+import { DEFAULT_PORT } from "../constants.ts";
+
 export function showLlmHelp() {
   console.log(`lootbox - Script Execution Reference
 
@@ -93,7 +95,7 @@ Function Library (tools object):
     lootbox tools types <ns>   See TypeScript signatures for namespace
 
 Options:
-  -s, --server <url>          WebSocket server URL (default: ws://localhost:3000/ws)
+  -s, --server <url>          WebSocket server URL (default: ws://localhost:${DEFAULT_PORT}/ws)
   --config <path>             Path to config file (default: lootbox.config.json)
   --timeout <ms>              Script execution timeout in milliseconds
   --rpc-timeout <ms>          RPC function call timeout in milliseconds
@@ -120,7 +122,7 @@ Script Management:
 
 Server Commands:
   server                      Start the WebSocket RPC server
-    --port <port>             Server port (default: 3000)
+    --port <port>             Server port (default: ${DEFAULT_PORT})
     --lootbox-root <path>     Lootbox root directory (default: .lootbox)
     --lootbox-data-dir <path> Data directory (optional, defaults to ~/.local/share/lootbox)
     --timeout <ms>            Script execution timeout (default: 10000)
@@ -163,7 +165,7 @@ Examples:
   lootbox fetch-data.ts                 # Run the script
 
   # Server mode
-  lootbox server                        # Uses defaults (port 3000, ./lootbox/tools)
+  lootbox server                        # Uses defaults (port ${DEFAULT_PORT}, ./lootbox/tools)
   lootbox server --port 9000            # Custom port
   lootbox server --timeout 60000        # 60-second script timeout
   lootbox server --no-sandbox           # Full permissions for scripts
@@ -196,7 +198,7 @@ Configuration File:
 Example:
   {
     "server": {
-      "port": 3000,
+      "port": ${DEFAULT_PORT},
       "lootboxRoot": ".lootbox",
       "timeout": 30000,
       "rpcTimeout": 60000,
@@ -207,12 +209,12 @@ Example:
       "clientTimeoutBuffer": 5000
     },
     "global": {
-      "port": 3000
+      "port": ${DEFAULT_PORT}
     }
   }
 
 Server Settings (server.*):
-  port              Server port (default: 3000)
+  port              Server port (default: ${DEFAULT_PORT})
   lootboxRoot       Root directory for lootbox files (default: .lootbox)
                     Contains: tools/, workflows/, scripts/
   lootboxDataDir    Internal data directory (default: ~/.local/share/lootbox)
@@ -224,7 +226,7 @@ Server Settings (server.*):
   permissions       Deno permissions for user scripts (see below)
 
 Client Settings (client.*):
-  serverUrl           Override WebSocket URL (e.g., wss://remote:3000/ws)
+  serverUrl           Override WebSocket URL (e.g., wss://remote:${DEFAULT_PORT}/ws)
                       CLI: --server-url <url> or -s <url>
   clientTimeout       Client response timeout in ms
                       Default: max(timeout + clientTimeoutBuffer, 30000)
