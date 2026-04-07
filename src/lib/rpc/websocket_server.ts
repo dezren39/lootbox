@@ -138,7 +138,7 @@ export class WebSocketRpcServer {
         reconnectBackoffBase: config.mcp_reconnect_backoff_base,
         maxReconnectBackoff: config.mcp_max_reconnect_backoff,
         checkTimeout: config.mcp_health_check_timeout,
-      }) : Promise.resolve(),
+      }, port, config.mcp_default_multi_client_strategy) : Promise.resolve(),
     ]);
 
     // Phase 2.5: Generate initial client code
