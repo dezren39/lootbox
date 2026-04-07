@@ -16,6 +16,7 @@ import type { McpServerSchemas } from "../../external-mcps/mcp_schema_fetcher.ts
 import { convertMcpSchemasToExtractionResults } from "../../external-mcps/parse_mcp_schemas.ts";
 import type { RpcFile } from "../load_rpc_files.ts";
 import type { ExtractionResult } from "../../type_system/types.ts";
+import { DEFAULT_TIMEOUT_MS } from "../../constants.ts";
 
 export class TypeGeneratorManager {
   private cachedTypes: string | null = null;
@@ -100,7 +101,7 @@ export class TypeGeneratorManager {
 
     const options = {
       websocketUrl: `ws://localhost:${port}/ws`,
-      timeout: timeout ?? 10000,
+      timeout: timeout ?? DEFAULT_TIMEOUT_MS,
       clientClassName: "RpcClient",
       includeInterfaces: true,
     };

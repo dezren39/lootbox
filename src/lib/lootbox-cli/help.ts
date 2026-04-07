@@ -26,8 +26,8 @@ AVAILABLE APIS:
     .raw()                          Returns raw input
 
 CONSTRAINTS:
-  • Configurable execution timeout (default: 10 seconds)
-  • Sandboxed execution for safety (configurable via config or --no-sandbox)
+  \u2022 Configurable execution timeout (default: 10 seconds)
+  \u2022 Permission-controlled execution for safety (configurable)
 
 EXAMPLES:
   # Discover and use tools
@@ -61,8 +61,8 @@ export function showHumanHelp() {
   console.log(`lootbox - Sandboxed TypeScript runtime with network access
 
 Write scripts with fetch() for web requests and the 'tools' object for
-additional capabilities. Sandboxed execution keeps your system safe while
-you orchestrate, fetch, and transform data.
+additional capabilities. Permission-controlled execution keeps your system
+safe while you orchestrate, fetch, and transform data.
 
 Usage:
   lootbox [OPTIONS] [FILE]
@@ -73,11 +73,11 @@ Usage:
   lootbox server [OPTIONS]
 
 Execution Environment:
-  • Runtime: Deno sandbox with TypeScript support
-  • Network: fetch() available for HTTP requests
-  • Sandbox: Direct file system and environment access disabled (configurable)
-  • Timeout: Configurable execution limit (default: 10 seconds)
-  • Global APIs: console, fetch, Promise, standard JavaScript/TypeScript APIs
+  \u2022 Runtime: Deno with TypeScript support
+  \u2022 Network: fetch() available for HTTP requests
+  \u2022 Permissions: Configurable Deno permissions (default: --allow-net only)
+  \u2022 Timeout: Configurable execution limit (default: 10 seconds)
+  \u2022 Global APIs: console, fetch, Promise, standard JavaScript/TypeScript APIs
 
 Function Library (tools object):
   The 'tools' object provides access to functions organized by namespace.
@@ -94,6 +94,13 @@ Function Library (tools object):
 
 Options:
   -s, --server <url>          WebSocket server URL (default: ws://localhost:3000/ws)
+  --config <path>             Path to config file (default: lootbox.config.json)
+  --timeout <ms>              Script execution timeout in milliseconds
+  --rpc-timeout <ms>          RPC function call timeout in milliseconds
+  --client-timeout <ms>       Client-side response timeout in milliseconds
+  --no-sandbox                Grant full Deno permissions (--allow-all)
+  --allow-<perm>[=value]      Add a Deno --allow-* permission flag
+  --deny-<perm>[=value]       Add a Deno --deny-* permission flag
   --config-help               Show configuration file information
   --llm-help                  Show LLM-focused help (command index)
   -h, --help                  Show this help message
@@ -116,6 +123,12 @@ Server Commands:
     --port <port>             Server port (default: 3000)
     --lootbox-root <path>     Lootbox root directory (default: .lootbox)
     --lootbox-data-dir <path> Data directory (optional, defaults to ~/.local/share/lootbox)
+    --timeout <ms>            Script execution timeout (default: 10000)
+    --rpc-timeout <ms>        RPC call timeout (default: 30000)
+    --config <path>           Path to config file
+    --no-sandbox              Grant full permissions to user scripts
+    --allow-<perm>            Add Deno permission
+    --deny-<perm>             Add Deno deny permission
 
 Tool Discovery:
   lootbox tools                            # List all available namespaces
@@ -152,6 +165,8 @@ Examples:
   # Server mode
   lootbox server                        # Uses defaults (port 3000, ./lootbox/tools)
   lootbox server --port 9000            # Custom port
+  lootbox server --timeout 60000        # 60-second script timeout
+  lootbox server --no-sandbox           # Full permissions for scripts
 
   # Workflow file format (YAML):
   # steps:
@@ -169,42 +184,80 @@ Examples:
 export function showConfigHelp() {
   console.log(`lootbox - Configuration
 
-Create a lootbox.config.json file in your project directory to configure both
-client and server settings. All settings are optional with sensible defaults.
+Create a lootbox.config.json file in your project directory (or specify
+--config <path>) to configure server, client, and execution settings.
+All settings are optional with sensible defaults.
 
 Configuration File:
-  File: lootbox.config.json (in current directory)
+  Default: lootbox.config.json (in current directory)
+  Override: --config <path>
   Format: JSON
 
 Example:
   {
-    "port": 3000,
-    "lootboxRoot": ".lootbox",
-    "timeout": 30000,
-    "sandbox": false,
-    "mcpServers": {
-      "filesystem": {
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/files"]
-      }
+    "server": {
+      "port": 3000,
+      "lootboxRoot": ".lootbox",
+      "timeout": 30000,
+      "rpcTimeout": 60000,
+      "permissions": true
+    },
+    "client": {
+      "clientTimeout": 35000,
+      "clientTimeoutBuffer": 5000
+    },
+    "global": {
+      "port": 3000
     }
   }
 
-Settings:
-  port              Server port (default: 3000, client derives ws://localhost:{port}/ws)
-  serverUrl         Override for custom host/protocol (e.g., wss://remote:3000/ws)
+Server Settings (server.*):
+  port              Server port (default: 3000)
   lootboxRoot       Root directory for lootbox files (default: .lootbox)
                     Contains: tools/, workflows/, scripts/
   lootboxDataDir    Internal data directory (default: ~/.local/share/lootbox)
   mcpServers        MCP server definitions (command, args, env)
-  timeout           Script execution timeout in milliseconds (default: 10000)
+  timeout           Script execution timeout in ms (default: 10000)
                     CLI: --timeout <ms>
-  sandbox           Enable sandboxed execution (default: true)
-                    When false, scripts run with full Deno permissions (--allow-all)
-                    CLI: --no-sandbox
+  rpcTimeout        RPC function call timeout in ms (default: 30000)
+                    CLI: --rpc-timeout <ms>
+  workerReadyTimeout  Max wait for workers to start in ms (default: 30000)
+  permissions       Deno permissions for user scripts (see below)
+
+Client Settings (client.*):
+  serverUrl           Override WebSocket URL (e.g., wss://remote:3000/ws)
+  clientTimeout       Client response timeout in ms
+                      Default: max(timeout + clientTimeoutBuffer, 30000)
+                      CLI: --client-timeout <ms>
+  clientTimeoutBuffer Extra ms added to server timeout for client timeout
+                      May be negative. Default: 5000.
+                      CLI: --client-timeout-buffer <ms>
+
+Global Settings (global.*):
+  port              Default port used by both server and client
+
+Permissions:
+  Controls Deno permissions for user-script execution.
+
+  true              Apply defaults (--allow-net only) [default]
+  false / null      No extra permissions (fully sandboxed)
+  "all"             Grant --allow-all (full access)
+  "net,read=/tmp"   Comma-separated permission tokens
+  ["--allow-net", "--allow-read=/tmp"]   Array of flags
+  {                 Object form:
+    "defaults": true,            Prepend default flags
+    "allow": ["net", "read"],    --allow-net, --allow-read
+    "deny": ["write"]            --deny-write
+  }
+
+  CLI flags --allow-* and --deny-* append to config permissions.
+  --no-sandbox overrides everything with --allow-all.
 
 Priority (for all settings):
   CLI flags > config file > defaults
+
+Legacy flat keys (port, timeout, sandbox, etc.) are still read for
+backward compatibility but the structured form is preferred.
 
 The config file is optional. If not found, defaults will be used.
 `);

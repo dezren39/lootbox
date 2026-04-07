@@ -26,19 +26,10 @@ export const execute_llm_script = async (args: { script: string; sessionId?: str
     const timeoutMs = config.timeout;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    // Build deno command args based on sandbox setting
-    const denoArgs: string[] = ["run"];
-
-    if (config.sandbox) {
-      // Sandboxed: only allow network access
-      denoArgs.push("--allow-net");
-    } else {
-      // Unsandboxed: full permissions
-      denoArgs.push("--allow-all");
-    }
+    // Build deno command args from resolved permission flags
+    const denoArgs: string[] = ["run", ...config.permission_flags];
 
     denoArgs.push(
-      `--allow-import=localhost:${config.port}`,
       `--reload=http://localhost:${config.port}/client.ts`,
       "--no-check=remote",
       tempFile,

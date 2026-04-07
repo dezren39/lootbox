@@ -119,7 +119,8 @@ export class WebSocketRpcServer {
       : undefined;
     const clientCode = await this.typeGeneratorManager.generateClientCode(
       port,
-      schemas
+      schemas,
+      config.timeout,
     );
     set_client(clientCode);
 
@@ -127,7 +128,7 @@ export class WebSocketRpcServer {
     this.wireManagers();
 
     // Phase 4: Setup message routing
-    this.workerManager = new WorkerManager(port);
+    this.workerManager = new WorkerManager(port, config.rpc_timeout);
     this.messageRouter = new MessageRouter(
       this.workerManager,
       this.mcpIntegrationManager
@@ -156,7 +157,7 @@ export class WebSocketRpcServer {
     );
 
     // Wait for workers to be ready
-    await this.workerManager.waitForReady(5000);
+    await this.workerManager.waitForReady(config.worker_ready_timeout);
 
     // Show bootup display
     showBootup({

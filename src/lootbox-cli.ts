@@ -30,7 +30,7 @@ import { VERSION } from "./version.ts";
 
 async function main() {
   const args = parseArgs(Deno.args, {
-    string: ["eval", "server", "types", "end-loop", "abort"],
+    string: ["eval", "server", "types", "end-loop", "abort", "config"],
     boolean: [
       "help",
       "human-help",
@@ -39,6 +39,7 @@ async function main() {
       "version",
       "namespaces",
       "config-help",
+      "no-sandbox",
     ],
     alias: {
       e: "eval",
@@ -77,7 +78,10 @@ async function main() {
 
   // Handle server command
   if (firstArg === "server") {
-    const serverArgs = args._.slice(1) as string[];
+    // Forward all args after "server" so flags like --timeout, --config,
+    // --no-sandbox, --allow-*, --deny-* reach the server startup.
+    const serverIdx = Deno.args.indexOf("server");
+    const serverArgs = serverIdx >= 0 ? Deno.args.slice(serverIdx + 1) : [];
     await startServer(serverArgs);
     return;
   }
@@ -93,8 +97,8 @@ async function main() {
     }
 
     // Load config for serverUrl
-    const config = await loadConfig();
-    const serverUrl = config.serverUrl || (config.port ? `ws://localhost:${config.port}/ws` : "ws://localhost:3000/ws");
+    const config = await loadConfig(args.config as string | undefined);
+    const serverUrl = config.serverUrl || config.client?.serverUrl || (config.port ? `ws://localhost:${config.port}/ws` : (config.server?.port ? `ws://localhost:${config.server.port}/ws` : (config.global?.port ? `ws://localhost:${config.global.port}/ws` : "ws://localhost:3000/ws")));
 
     if (!toolsCommand || toolsCommand === "list") {
       await toolsList(serverUrl);
@@ -124,8 +128,8 @@ async function main() {
     }
 
     // Load config for serverUrl
-    const config = await loadConfig();
-    const serverUrl = config.serverUrl || (config.port ? `ws://localhost:${config.port}/ws` : "ws://localhost:3000/ws");
+    const config = await loadConfig(args.config as string | undefined);
+    const serverUrl = config.serverUrl || config.client?.serverUrl || (config.port ? `ws://localhost:${config.port}/ws` : (config.server?.port ? `ws://localhost:${config.server.port}/ws` : (config.global?.port ? `ws://localhost:${config.global.port}/ws` : "ws://localhost:3000/ws")));
 
     await execInline(code, serverUrl);
     return;
@@ -205,18 +209,19 @@ async function main() {
   }
 
   // Load config file if present (silently ignore if not found)
-  const config = await loadConfig();
+  const config = await loadConfig(args.config as string | undefined);
 
-  // Priority: CLI arg > config file > derived from port > default
+  // Priority: CLI arg > config file (structured > legacy) > derived from port > default
   let serverUrl: string;
   if (args.server) {
     serverUrl = args.server as string;
+  } else if (config.client?.serverUrl) {
+    serverUrl = config.client.serverUrl;
   } else if (config.serverUrl) {
     serverUrl = config.serverUrl;
-  } else if (config.port) {
-    serverUrl = `ws://localhost:${config.port}/ws`;
   } else {
-    serverUrl = "ws://localhost:3000/ws";
+    const p = config.global?.port ?? config.server?.port ?? config.port;
+    serverUrl = p ? `ws://localhost:${p}/ws` : "ws://localhost:3000/ws";
   }
 
   // Get script from various sources

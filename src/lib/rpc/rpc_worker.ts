@@ -19,9 +19,10 @@ async function main() {
   const rpcFilePath = Deno.args[0];
   const workerWsUrl = Deno.args[1];
   const namespace = Deno.args[2];
+  const rpcTimeoutMs = parseInt(Deno.args[3] || "30000", 10) || 30000;
 
   if (!rpcFilePath || !workerWsUrl || !namespace) {
-    console.error("Usage: rpc_worker.ts <rpcFilePath> <workerWsUrl> <namespace>");
+    console.error("Usage: rpc_worker.ts <rpcFilePath> <workerWsUrl> <namespace> [rpcTimeoutMs]");
     Deno.exit(1);
   }
 
@@ -66,7 +67,7 @@ async function main() {
 
           // Execute with timeout
           const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error("Function execution timeout (30s)")), 30000);
+            setTimeout(() => reject(new Error(`Function execution timeout (${rpcTimeoutMs / 1000}s)`)), rpcTimeoutMs);
           });
 
           const result = await Promise.race([

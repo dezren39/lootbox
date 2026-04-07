@@ -25,9 +25,10 @@ async function main() {
   const rpcFilePath = Deno.args[0];
   const workerWsUrl = Deno.args[1];
   const namespace = Deno.args[2];
+  const rpcTimeoutMs = parseInt(Deno.args[3] || "30000", 10) || 30000;
 
   if (!rpcFilePath || !workerWsUrl || !namespace) {
-    console.error("Usage: rpc_worker.ts <rpcFilePath> <workerWsUrl> <namespace>");
+    console.error("Usage: rpc_worker.ts <rpcFilePath> <workerWsUrl> <namespace> [rpcTimeoutMs]");
     Deno.exit(1);
   }
 
@@ -72,7 +73,7 @@ async function main() {
 
           // Execute with timeout
           const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error("Function execution timeout (30s)")), 30000);
+            setTimeout(() => reject(new Error(\`Function execution timeout (\${rpcTimeoutMs / 1000}s)\`)), rpcTimeoutMs);
           });
 
           const result = await Promise.race([
@@ -211,9 +212,11 @@ type WorkerIncomingMessage =
 export class WorkerManager {
   private workers = new Map<string, WorkerState>();
   private port: number;
+  private rpcTimeout: number;
 
-  constructor(port: number) {
+  constructor(port: number, rpcTimeout: number = 30000) {
     this.port = port;
+    this.rpcTimeout = rpcTimeout;
   }
 
   /**
@@ -236,6 +239,7 @@ export class WorkerManager {
         file.path,
         workerWsUrl,
         workerId,
+        String(this.rpcTimeout),
       ],
       stdout: "piped",
       stderr: "inherit", // Show worker logs in main process
@@ -388,15 +392,15 @@ export class WorkerManager {
 
     // Create promise for response
     const resultPromise = new Promise<unknown>((resolve, reject) => {
-      // Timeout after 30 seconds
+      // Timeout for RPC call
       const timeoutId = setTimeout(() => {
         worker.pendingCalls.delete(callId);
         reject(
           new Error(
-            `RPC call timeout: ${namespace}.${functionName} (30 seconds)`
+            `RPC call timeout: ${namespace}.${functionName} (${this.rpcTimeout / 1000} seconds)`
           )
         );
-      }, 30000);
+      }, this.rpcTimeout);
 
       worker.pendingCalls.set(callId, { resolve, reject, timeoutId });
     });

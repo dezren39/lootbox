@@ -25,12 +25,16 @@ export async function executeScript(
     Deno.exit(1);
   }
 
+  // Resolve client timeout from config
+  const config = await get_config();
+  const clientTimeoutMs = config.client_timeout;
+
   const id = generateId();
   const responsePromise = new Promise<ExecResponse>((resolve, reject) => {
     const timeout = setTimeout(() => {
       ws.close();
-      reject(new Error("Timeout waiting for response (30s)"));
-    }, 30000);
+      reject(new Error(`Timeout waiting for response (${clientTimeoutMs / 1000}s)`));
+    }, clientTimeoutMs);
 
     ws.onopen = () => {
       ws.send(JSON.stringify({ script, id }));
