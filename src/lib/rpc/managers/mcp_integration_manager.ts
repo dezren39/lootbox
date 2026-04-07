@@ -4,27 +4,48 @@
  * Manages MCP (Model Context Protocol) integration.
  * Handles:
  * - MCP client lifecycle via McpClientManager
+ * - Health monitoring via McpHealthMonitor
  * - Schema fetching via McpSchemaFetcher
  * - MCP tool and resource calls
  * - Providing schemas to type generation
  */
 
-import { McpClientManager } from "../../external-mcps/mcp_client_manager.ts";
+import { McpClientManager, type McpServerHealth } from "../../external-mcps/mcp_client_manager.ts";
 import type { McpConfigFile } from "../../external-mcps/mcp_config.ts";
+import {
+  McpHealthMonitor,
+  type McpHealthGlobalDefaults,
+} from "../../external-mcps/mcp_health_monitor.ts";
 import { McpSchemaFetcher } from "../../external-mcps/mcp_schema_fetcher.ts";
 import type { McpServerSchemas } from "../../external-mcps/mcp_schema_fetcher.ts";
 import { executeMcpResource, executeMcpTool } from "../execute_mcp.ts";
+
+/** Overall MCP subsystem health status for the deep health endpoint. */
+export interface McpHealthStatus {
+  status: "ok" | "degraded" | "unhealthy";
+  servers: Record<string, McpServerHealth>;
+}
 
 export class McpIntegrationManager {
   private state: {
     clientManager: McpClientManager;
     schemaFetcher: McpSchemaFetcher;
+    healthMonitor: McpHealthMonitor;
+    mcpConfig: McpConfigFile;
   } | null = null;
 
   /**
-   * Initialize MCP integration with provided configuration
+   * Initialize MCP integration with provided configuration.
+   *
+   * @param mcpConfig        Parsed MCP server configuration.
+   * @param mcpClientName    Identity string sent to MCP servers.
+   * @param healthDefaults   Global health-check defaults from resolved config.
    */
-  async initialize(mcpConfig: McpConfigFile, mcpClientName?: string): Promise<void> {
+  async initialize(
+    mcpConfig: McpConfigFile,
+    mcpClientName?: string,
+    healthDefaults?: McpHealthGlobalDefaults,
+  ): Promise<void> {
     console.error("Initializing MCP integration...");
 
     const clientManager = new McpClientManager(mcpClientName ?? "lootbox");
@@ -38,7 +59,40 @@ export class McpIntegrationManager {
       }
     }
 
-    this.state = { clientManager, schemaFetcher };
+    // Set up health monitoring
+    const defaults: McpHealthGlobalDefaults = healthDefaults ?? {
+      checkInterval: 30_000,
+      maxReconnectAttempts: 5,
+      reconnectBackoffBase: 2_000,
+      maxReconnectBackoff: 60_000,
+      checkTimeout: 5_000,
+    };
+    const healthMonitor = new McpHealthMonitor(clientManager, defaults);
+
+    // When a server reconnects, automatically re-fetch its schemas
+    healthMonitor.onEvent(async (event) => {
+      if (event.type === "server:reconnected") {
+        const client = clientManager.getClient(event.serverName);
+        if (client) {
+          try {
+            await schemaFetcher.fetchSchemas(client, event.serverName);
+            console.error(
+              `[McpIntegrationManager] Re-fetched schemas for ${event.serverName} after reconnect`,
+            );
+          } catch (err) {
+            console.error(
+              `[McpIntegrationManager] Failed to re-fetch schemas for ${event.serverName}:`,
+              err,
+            );
+          }
+        }
+      }
+    });
+
+    // Start monitoring (uses per-server health configs from the McpConfigFile)
+    healthMonitor.start(mcpConfig.mcpServers);
+
+    this.state = { clientManager, schemaFetcher, healthMonitor, mcpConfig };
     console.error("MCP integration initialized successfully");
   }
 
@@ -47,6 +101,7 @@ export class McpIntegrationManager {
    */
   async shutdown(): Promise<void> {
     if (this.state) {
+      this.state.healthMonitor.stop();
       await this.state.clientManager.disconnectAll();
       this.state = null;
       console.error("MCP integration shut down");
@@ -61,7 +116,7 @@ export class McpIntegrationManager {
   async handleMcpCall(
     method: string,
     args: unknown,
-    rpcTimeout?: number
+    rpcTimeout?: number,
   ): Promise<{ success: boolean; data?: unknown; error?: string }> {
     if (!this.state) {
       return {
@@ -101,7 +156,7 @@ export class McpIntegrationManager {
         serverName,
         resourceName,
         args,
-        rpcTimeout
+        rpcTimeout,
       );
     } else {
       // It's a tool call
@@ -111,7 +166,7 @@ export class McpIntegrationManager {
         serverName,
         operationName,
         args,
-        rpcTimeout
+        rpcTimeout,
       );
     }
   }
@@ -124,10 +179,14 @@ export class McpIntegrationManager {
       return [];
     }
     const schemas: McpServerSchemas[] = [];
-    for (const serverName of this.state.clientManager.getConnectedServerNames()) {
+    for (
+      const serverName of this.state.clientManager.getConnectedServerNames()
+    ) {
       const client = this.state.clientManager.getClient(serverName);
       if (client) {
-        schemas.push(await this.state.schemaFetcher.fetchSchemas(client, serverName));
+        schemas.push(
+          await this.state.schemaFetcher.fetchSchemas(client, serverName),
+        );
       }
     }
     return schemas;
@@ -148,5 +207,41 @@ export class McpIntegrationManager {
    */
   isEnabled(): boolean {
     return this.state !== null;
+  }
+
+  /**
+   * Get the aggregate MCP health status for the deep health endpoint.
+   *
+   * Returns per-server health snapshots and an overall status:
+   *   "ok"        — all servers connected
+   *   "degraded"  — some servers unhealthy/reconnecting but at least one is connected
+   *   "unhealthy" — all servers are down
+   */
+  getHealthStatus(): McpHealthStatus {
+    if (!this.state) {
+      return { status: "ok", servers: {} };
+    }
+
+    const servers = this.state.clientManager.getServerHealth();
+    const names = Object.keys(servers);
+
+    if (names.length === 0) {
+      return { status: "ok", servers };
+    }
+
+    const connectedCount = names.filter(
+      (n) => servers[n].status === "connected",
+    ).length;
+
+    let status: "ok" | "degraded" | "unhealthy";
+    if (connectedCount === names.length) {
+      status = "ok";
+    } else if (connectedCount > 0) {
+      status = "degraded";
+    } else {
+      status = "unhealthy";
+    }
+
+    return { status, servers };
   }
 }
