@@ -5,6 +5,7 @@ import {
   showHumanHelp,
   showLlmHelp,
 } from "./lib/lootbox-cli/help.ts";
+import { healthCommand } from "./lib/lootbox-cli/health.ts";
 import { init } from "./lib/lootbox-cli/init.ts";
 import { startServer } from "./lib/lootbox-cli/server.ts";
 import {
@@ -40,6 +41,7 @@ async function main() {
       "namespaces",
       "config-help",
       "no-sandbox",
+      "json",
     ],
     alias: {
       e: "eval",
@@ -73,6 +75,12 @@ async function main() {
   const firstArg = args._[0] as string | undefined;
   if (firstArg === "init") {
     await init();
+    return;
+  }
+
+  // Handle health command
+  if (firstArg === "health") {
+    await healthCommand(!!args.json);
     return;
   }
 
