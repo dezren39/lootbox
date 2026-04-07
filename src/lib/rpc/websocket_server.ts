@@ -163,7 +163,8 @@ export class WebSocketRpcServer {
     });
     this.messageRouter = new MessageRouter(
       this.workerManager,
-      this.mcpIntegrationManager
+      this.mcpIntegrationManager,
+      config.rpc_timeout
     );
 
     // Phase 5: Setup HTTP routes with OpenAPI documentation

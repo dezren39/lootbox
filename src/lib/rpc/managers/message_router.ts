@@ -34,7 +34,8 @@ export interface RpcResponse {
 export class MessageRouter {
   constructor(
     private workerManager: WorkerManager,
-    private mcpIntegrationManager: McpIntegrationManager
+    private mcpIntegrationManager: McpIntegrationManager,
+    private rpcTimeout?: number
   ) {}
 
   /**
@@ -145,7 +146,8 @@ export class MessageRouter {
     } else {
       const result = await this.mcpIntegrationManager.handleMcpCall(
         msg.method,
-        msg.args
+        msg.args,
+        this.rpcTimeout
       );
       if (result.success) {
         response.result = result.data;

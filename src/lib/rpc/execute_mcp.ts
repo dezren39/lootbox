@@ -21,7 +21,8 @@ export async function executeMcpTool(
   schemaFetcher: McpSchemaFetcher,
   serverName: string,
   toolName: string,
-  args: unknown
+  args: unknown,
+  rpcTimeout: number = DEFAULT_RPC_TIMEOUT_MS
 ): Promise<McpExecutionResult> {
   try {
     const client = clientManager.getClient(serverName);
@@ -58,8 +59,8 @@ export async function executeMcpTool(
     // Execute with timeout using original name
     const result = await executeWithTimeout(
       client.callTool({ name: tool.originalName, arguments: args as Record<string, unknown> | undefined }),
-      DEFAULT_RPC_TIMEOUT_MS,
-      `Tool call ${serverName}.${tool.originalName} timed out after ${DEFAULT_RPC_TIMEOUT_MS / 1000} seconds`
+      rpcTimeout,
+      `Tool call ${serverName}.${tool.originalName} timed out after ${rpcTimeout / 1000} seconds`
     );
 
     console.error(`MCP tool ${serverName}.${tool.originalName} completed successfully`);
@@ -89,7 +90,8 @@ export async function executeMcpResource(
   schemaFetcher: McpSchemaFetcher,
   serverName: string,
   resourceName: string,
-  args: unknown
+  args: unknown,
+  rpcTimeout: number = DEFAULT_RPC_TIMEOUT_MS
 ): Promise<McpExecutionResult> {
   try {
     const client = clientManager.getClient(serverName);
@@ -128,8 +130,8 @@ export async function executeMcpResource(
     // Execute with timeout
     const result = await executeWithTimeout(
       client.readResource({ uri }),
-      DEFAULT_RPC_TIMEOUT_MS,
-      `Resource read ${serverName}.${resource.originalName} timed out after ${DEFAULT_RPC_TIMEOUT_MS / 1000} seconds`
+      rpcTimeout,
+      `Resource read ${serverName}.${resource.originalName} timed out after ${rpcTimeout / 1000} seconds`
     );
 
     console.error(

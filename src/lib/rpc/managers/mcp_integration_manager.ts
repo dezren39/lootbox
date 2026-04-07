@@ -60,7 +60,8 @@ export class McpIntegrationManager {
    */
   async handleMcpCall(
     method: string,
-    args: unknown
+    args: unknown,
+    rpcTimeout?: number
   ): Promise<{ success: boolean; data?: unknown; error?: string }> {
     if (!this.state) {
       return {
@@ -99,7 +100,8 @@ export class McpIntegrationManager {
         this.state.schemaFetcher,
         serverName,
         resourceName,
-        args
+        args,
+        rpcTimeout
       );
     } else {
       // It's a tool call
@@ -108,7 +110,8 @@ export class McpIntegrationManager {
         this.state.schemaFetcher,
         serverName,
         operationName,
-        args
+        args,
+        rpcTimeout
       );
     }
   }

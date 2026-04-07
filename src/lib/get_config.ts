@@ -1,7 +1,9 @@
 import { parseArgs } from "@std/cli";
 import { exists } from "https://deno.land/std@0.208.0/fs/mod.ts";
 import type {
+  ClientConfig,
   Config,
+  GlobalConfig,
   HazmatClientExtras,
   HazmatGlobalExtras,
   HazmatServerExtras,
@@ -218,8 +220,8 @@ export const get_config = async (): Promise<ResolvedConfig> => {
   const glb = config.global ?? {};
   const haz = config.hazmat ?? {};
   const hazSrv = (haz.server ?? {}) as Partial<ServerConfig & HazmatServerExtras>;
-  const hazCli = (haz.client ?? {}) as Partial<import("./lootbox-cli/types.ts").ClientConfig & HazmatClientExtras>;
-  const hazGlb = (haz.global ?? {}) as Partial<import("./lootbox-cli/types.ts").GlobalConfig & HazmatGlobalExtras>;
+  const hazCli = (haz.client ?? {}) as Partial<ClientConfig & HazmatClientExtras>;
+  const hazGlb = (haz.global ?? {}) as Partial<GlobalConfig & HazmatGlobalExtras>;
 
   // --- Port -----------------------------------------------------------
   const port = (() => {
