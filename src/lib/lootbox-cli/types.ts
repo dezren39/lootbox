@@ -69,8 +69,6 @@ export interface ServerConfig {
   permissions?: PermissionsConfig;
   /** RPC function-call timeout inside worker subprocesses in ms (default 30 000). */
   rpcTimeout?: number;
-  /** Max time to wait for workers to become ready in ms (default 30 000). */
-  workerReadyTimeout?: number;
 }
 
 /** Client-specific configuration. */
@@ -97,9 +95,19 @@ export interface GlobalConfig {
 
 /** Hazmat (internal) overrides – mirrors the same structure. */
 export interface HazmatConfig {
-  server?: Partial<ServerConfig>;
+  server?: Partial<ServerConfig & HazmatServerExtras>;
   client?: Partial<ClientConfig>;
   global?: Partial<GlobalConfig>;
+}
+
+/**
+ * Extra fields that are only valid inside hazmat.server.
+ * Placing these in the normal `server` block will trigger
+ * strict-validation errors/warnings.
+ */
+export interface HazmatServerExtras {
+  /** Max time to wait for workers to become ready in ms (default 30 000). */
+  workerReadyTimeout?: number;
 }
 
 /** Root config file schema. */

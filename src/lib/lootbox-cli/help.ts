@@ -221,11 +221,11 @@ Server Settings (server.*):
                     CLI: --timeout <ms>
   rpcTimeout        RPC function call timeout in ms (default: 30000)
                     CLI: --rpc-timeout <ms>
-  workerReadyTimeout  Max wait for workers to start in ms (default: 30000)
   permissions       Deno permissions for user scripts (see below)
 
 Client Settings (client.*):
   serverUrl           Override WebSocket URL (e.g., wss://remote:3000/ws)
+                      CLI: --server-url <url> or -s <url>
   clientTimeout       Client response timeout in ms
                       Default: max(timeout + clientTimeoutBuffer, 30000)
                       CLI: --client-timeout <ms>
@@ -255,6 +255,23 @@ Permissions:
 
 Priority (for all settings):
   CLI flags > config file > defaults
+
+  Full priority chain:
+    CLI flag > hazmat.{server,client,global} > {server,client,global}
+    > legacy flat keys > built-in defaults (constants.ts)
+
+  Type boundaries (ServerConfig, ClientConfig, HazmatServerExtras, etc.)
+  enforce which keys belong where at compile time. Unknown JSON keys are
+  silently ignored at runtime.
+
+Settings That Can ONLY Be Set in Config (no CLI flag):
+  server.mcpServers, server.permissions (object form),
+  all hazmat.* overrides
+
+Settings That Can ONLY Be Set via CLI (not in config):
+  --no-sandbox (applies --allow-all; config equivalent: permissions: "all")
+  --eval / -e (inline code to execute)
+  --help, --version, --llm-help, --config-help
 
 Legacy flat keys (port, timeout, sandbox, etc.) are still read for
 backward compatibility but the structured form is preferred.

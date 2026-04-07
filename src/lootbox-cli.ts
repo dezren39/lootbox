@@ -1,5 +1,4 @@
 import { parseArgs } from "@std/cli";
-import { loadConfig } from "./lib/lootbox-cli/config.ts";
 import { executeScript, getScriptFromArgs, execInline } from "./lib/lootbox-cli/exec.ts";
 import {
   showConfigHelp,
@@ -27,6 +26,7 @@ import {
   showToolsLlmHelp,
 } from "./lib/lootbox-cli/tools.ts";
 import { VERSION } from "./version.ts";
+import { get_config } from "./lib/get_config.ts";
 
 async function main() {
   const args = parseArgs(Deno.args, {
@@ -96,9 +96,9 @@ async function main() {
       return;
     }
 
-    // Load config for serverUrl
-    const config = await loadConfig(args.config as string | undefined);
-    const serverUrl = config.serverUrl || config.client?.serverUrl || (config.port ? `ws://localhost:${config.port}/ws` : (config.server?.port ? `ws://localhost:${config.server.port}/ws` : (config.global?.port ? `ws://localhost:${config.global.port}/ws` : "ws://localhost:3000/ws")));
+    // Resolve config for serverUrl
+    const resolvedConfig = await get_config();
+    const serverUrl = resolvedConfig.server_url;
 
     if (!toolsCommand || toolsCommand === "list") {
       await toolsList(serverUrl);
@@ -127,9 +127,9 @@ async function main() {
       Deno.exit(1);
     }
 
-    // Load config for serverUrl
-    const config = await loadConfig(args.config as string | undefined);
-    const serverUrl = config.serverUrl || config.client?.serverUrl || (config.port ? `ws://localhost:${config.port}/ws` : (config.server?.port ? `ws://localhost:${config.server.port}/ws` : (config.global?.port ? `ws://localhost:${config.global.port}/ws` : "ws://localhost:3000/ws")));
+    // Resolve config for serverUrl
+    const resolvedConfig = await get_config();
+    const serverUrl = resolvedConfig.server_url;
 
     await execInline(code, serverUrl);
     return;
@@ -208,21 +208,13 @@ async function main() {
     return;
   }
 
-  // Load config file if present (silently ignore if not found)
-  const config = await loadConfig(args.config as string | undefined);
-
-  // Priority: CLI arg > config file (structured > legacy) > derived from port > default
-  let serverUrl: string;
-  if (args.server) {
-    serverUrl = args.server as string;
-  } else if (config.client?.serverUrl) {
-    serverUrl = config.client.serverUrl;
-  } else if (config.serverUrl) {
-    serverUrl = config.serverUrl;
-  } else {
-    const p = config.global?.port ?? config.server?.port ?? config.port;
-    serverUrl = p ? `ws://localhost:${p}/ws` : "ws://localhost:3000/ws";
-  }
+  // Resolve config through get_config (handles structured + legacy + hazmat + CLI)
+  const resolvedConfig = await get_config();
+  const serverUrl = (() => {
+    // --server CLI flag overrides everything (legacy alias for --server-url)
+    if (args.server) return args.server as string;
+    return resolvedConfig.server_url;
+  })();
 
   // Get script from various sources
   const script = await getScriptFromArgs(

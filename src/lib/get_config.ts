@@ -2,9 +2,11 @@ import { parseArgs } from "@std/cli";
 import { exists } from "https://deno.land/std@0.208.0/fs/mod.ts";
 import type {
   Config,
+  HazmatServerExtras,
   McpServerConfig,
   PermissionsConfig,
   ResolvedConfig,
+  ServerConfig,
 } from "./lootbox-cli/types.ts";
 import {
   getUserLootboxToolsDir,
@@ -94,18 +96,6 @@ function parsePermissions(
     flags.push(...DEFAULT_PERMISSION_FLAGS);
   }
   if (perm.allow) {
-    for (const a of perm.allow) {
-      const n = normalisePermissionToken(a);
-      if (n) flags.push(n.startsWith("--deny") ? n : n.startsWith("--allow") ? n : `--allow-${a.trim()}`);
-      // normalisePermissionToken already does the right thing; just push:
-    }
-    // Redo cleanly:
-    flags.length = perm.defaults ? DEFAULT_PERMISSION_FLAGS.length : 0;
-    if (perm.defaults) {
-      for (let i = 0; i < DEFAULT_PERMISSION_FLAGS.length; i++) {
-        flags[i] = DEFAULT_PERMISSION_FLAGS[i];
-      }
-    }
     for (const a of perm.allow) {
       const n = normalisePermissionToken(a);
       if (n) flags.push(n);
@@ -198,13 +188,17 @@ export const get_config = async (): Promise<ResolvedConfig> => {
   // --- Load config file -----------------------------------------------
   const config = await loadConfigFile(args.config as string | undefined);
 
-  // Merge structured + legacy + hazmat.  Priority (highest first):
+  // --- Merge structured + legacy + hazmat ---------------------------------
+  //   Priority (highest first):
   //   CLI flag > hazmat.server/client/global > server/client/global > legacy flat keys > defaults
+  //
+  //   Type boundaries enforce which keys belong where at compile time;
+  //   unknown JSON keys are simply ignored at runtime (no manual key lists).
   const srv = config.server ?? {};
   const cli_ = config.client ?? {};
   const glb = config.global ?? {};
   const haz = config.hazmat ?? {};
-  const hazSrv = haz.server ?? {};
+  const hazSrv = (haz.server ?? {}) as Partial<ServerConfig & HazmatServerExtras>;
   const hazCli = haz.client ?? {};
   const hazGlb = haz.global ?? {};
 
@@ -314,9 +308,8 @@ export const get_config = async (): Promise<ResolvedConfig> => {
   // --- Worker ready timeout -------------------------------------------
   const workerReadyTimeout = (() => {
     const n = resolveNumber(
-      undefined, // no CLI flag for this
+      undefined, // no CLI flag for this – hazmat only
       hazSrv.workerReadyTimeout,
-      srv.workerReadyTimeout,
     );
     return n ?? DEFAULT_WORKER_READY_TIMEOUT_MS;
   })();

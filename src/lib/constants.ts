@@ -55,3 +55,4 @@ export const DEFAULT_PERMISSION_FLAGS: readonly string[] = ["--allow-net"];
  * when no --config flag is supplied.
  */
 export const DEFAULT_CONFIG_FILENAME = "lootbox.config.json";
+
