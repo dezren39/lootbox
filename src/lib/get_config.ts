@@ -182,9 +182,32 @@ function resolveNumber(
   return undefined;
 }
 
-// ── Main export ──────────────────────────────────────────────────────
+// ── Singleton cache ──────────────────────────────────────────────────
 
+let _cachedConfig: ResolvedConfig | null = null;
+
+/**
+ * Return the cached ResolvedConfig, or resolve it on first call.
+ *
+ * The config is determined by CLI args + config file and does not change
+ * at runtime, so caching after the first resolution is safe.  Call
+ * `resetConfigCache()` in tests to force a fresh resolution.
+ */
 export const get_config = async (): Promise<ResolvedConfig> => {
+  if (_cachedConfig) return _cachedConfig;
+  const resolved = await _resolve_config();
+  _cachedConfig = resolved;
+  return resolved;
+};
+
+/** Clear the cached config (for tests). */
+export function resetConfigCache(): void {
+  _cachedConfig = null;
+}
+
+// ── Config resolution (internal) ─────────────────────────────────────
+
+const _resolve_config = async (): Promise<ResolvedConfig> => {
   // --- Parse CLI args -------------------------------------------------
   const args = parseArgs(Deno.args, {
     string: [
