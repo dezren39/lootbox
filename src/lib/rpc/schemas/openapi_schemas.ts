@@ -2,7 +2,29 @@ import { z } from "zod";
 
 // Health endpoint schemas
 export const HealthResponseSchema = z.object({
-  status: z.string().openapi({ example: "ok" }),
+  status: z.enum(["ok", "degraded", "unhealthy"]).openapi({ example: "ok" }),
+  uptime_ms: z.number().openapi({ example: 123456 }),
+  subsystems: z.object({
+    workers: z.object({
+      status: z.enum(["ok", "degraded", "unhealthy"]).openapi({ example: "ok" }),
+      total: z.number().openapi({ example: 5 }),
+      ready: z.number().openapi({ example: 5 }),
+      failed: z.number().openapi({ example: 0 }),
+      crashed: z.number().openapi({ example: 0 }),
+      starting: z.number().openapi({ example: 0 }),
+    }),
+    mcp_servers: z.object({
+      status: z.enum(["ok", "degraded", "unhealthy"]).openapi({ example: "ok" }),
+      servers: z.record(
+        z.string(),
+        z.object({
+          status: z.enum(["connected", "disconnected", "reconnecting", "failed"]).openapi({ example: "connected" }),
+          last_health_check: z.string().nullable().openapi({ example: "2026-04-07T12:00:00.000Z" }),
+          reconnect_attempts: z.number().openapi({ example: 0 }),
+        }),
+      ).openapi({ example: {} }),
+    }),
+  }),
 });
 
 // Namespaces endpoint schemas

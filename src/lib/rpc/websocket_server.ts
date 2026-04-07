@@ -249,7 +249,8 @@ export class WebSocketRpcServer {
       get_client,
       this.currentPort,
       this.healthPath,
-      this.openApiTitle
+      this.openApiTitle,
+      this.workerManager
     );
     openApiHandler.setupRoutes();
 
