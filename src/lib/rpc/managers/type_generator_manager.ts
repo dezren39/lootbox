@@ -16,7 +16,7 @@ import type { McpServerSchemas } from "../../external-mcps/mcp_schema_fetcher.ts
 import { convertMcpSchemasToExtractionResults } from "../../external-mcps/parse_mcp_schemas.ts";
 import type { RpcFile } from "../load_rpc_files.ts";
 import type { ExtractionResult } from "../../type_system/types.ts";
-import { DEFAULT_TIMEOUT_MS } from "../../constants.ts";
+import { DEFAULT_TIMEOUT_MS, DEFAULT_AUTO_DISCONNECT_DELAY_MS } from "../../constants.ts";
 
 export class TypeGeneratorManager {
   private cachedTypes: string | null = null;
@@ -88,7 +88,8 @@ export class TypeGeneratorManager {
   async generateClientCode(
     port: number,
     mcpSchemas?: McpServerSchemas[],
-    timeout?: number
+    timeout?: number,
+    autoDisconnectDelay?: number
   ): Promise<string> {
     const uniqueFiles = this.rpcCacheManager.getUniqueFiles();
 
@@ -102,6 +103,7 @@ export class TypeGeneratorManager {
     const options = {
       websocketUrl: `ws://localhost:${port}/ws`,
       timeout: timeout ?? DEFAULT_TIMEOUT_MS,
+      autoDisconnectDelay: autoDisconnectDelay ?? DEFAULT_AUTO_DISCONNECT_DELAY_MS,
       clientClassName: "RpcClient",
       includeInterfaces: true,
     };

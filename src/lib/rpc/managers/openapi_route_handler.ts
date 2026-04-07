@@ -36,7 +36,9 @@ export class OpenApiRouteHandler {
     private typeGeneratorManager: TypeGeneratorManager,
     private mcpIntegrationManager: McpIntegrationManager,
     private clientCacheGetter: () => { code: string },
-    private port: number
+    private port: number,
+    private healthPath: string = "/health",
+    private openApiTitle: string = "Lootbox API"
   ) {}
 
   setupRoutes(): void {
@@ -53,7 +55,7 @@ export class OpenApiRouteHandler {
     this.app.openapi(
       createRoute({
         method: "get",
-        path: "/health",
+        path: this.healthPath,
         tags: ["Health"],
         summary: "Check server health",
         description: "Returns server status",
@@ -250,7 +252,7 @@ export class OpenApiRouteHandler {
       openapi: "3.1.0",
       info: {
         version: VERSION,
-        title: "Lootbox API",
+        title: this.openApiTitle,
         description:
           "REST API for the Lootbox server. Provides TypeScript type definitions, RPC client code generation, namespace discovery, and server health monitoring.",
       },

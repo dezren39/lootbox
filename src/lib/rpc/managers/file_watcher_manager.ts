@@ -19,7 +19,8 @@ export class FileWatcherManager {
    */
   startWatching(
     directory: string,
-    onChange: () => Promise<void>
+    onChange: () => Promise<void>,
+    debounceMs: number = 100
   ): void {
     if (this.watching) {
       console.error("File watcher already running");
@@ -37,7 +38,7 @@ export class FileWatcherManager {
             // Only react to TypeScript file changes
             if (event.paths.some((path) => path.endsWith(".ts"))) {
               // Debounce rapid file changes
-              await new Promise((resolve) => setTimeout(resolve, 100));
+              await new Promise((resolve) => setTimeout(resolve, debounceMs));
               await onChange();
             }
           }

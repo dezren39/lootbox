@@ -2,6 +2,8 @@ import { parseArgs } from "@std/cli";
 import { exists } from "https://deno.land/std@0.208.0/fs/mod.ts";
 import type {
   Config,
+  HazmatClientExtras,
+  HazmatGlobalExtras,
   HazmatServerExtras,
   McpServerConfig,
   PermissionsConfig,
@@ -19,10 +21,27 @@ import {
   DEFAULT_TIMEOUT_MS,
   DEFAULT_RPC_TIMEOUT_MS,
   DEFAULT_WORKER_READY_TIMEOUT_MS,
+  DEFAULT_WORKER_SHUTDOWN_GRACE_MS,
+  DEFAULT_FILE_WATCH_DEBOUNCE_MS,
+  DEFAULT_MAX_WORKER_BACKOFF_MS,
+  DEFAULT_MAX_WORKER_RESTARTS,
+  DEFAULT_WORKER_BACKOFF_BASE_MS,
+  DEFAULT_SERVER_START_DELAY_MS,
+  DEFAULT_WORKER_POLL_INTERVAL_MS,
   DEFAULT_CLIENT_TIMEOUT_BUFFER_MS,
   CLIENT_TIMEOUT_FLOOR_MS,
+  DEFAULT_AUTO_DISCONNECT_DELAY_MS,
+  DEFAULT_RECONNECT_DELAY_MS,
   DEFAULT_PERMISSION_FLAGS,
   DEFAULT_CONFIG_FILENAME,
+  DEFAULT_DB_FILENAME,
+  DEFAULT_WS_PATH,
+  DEFAULT_WORKER_WS_PATH,
+  DEFAULT_HEALTH_PATH,
+  DEFAULT_TOOL_FILE_EXTENSION,
+  DEFAULT_OPENAPI_TITLE,
+  DEFAULT_WORKFLOW_STATE_FILE,
+  DEFAULT_MCP_CLIENT_NAME,
 } from "./constants.ts";
 
 // ── Config file loading ──────────────────────────────────────────────
@@ -199,8 +218,8 @@ export const get_config = async (): Promise<ResolvedConfig> => {
   const glb = config.global ?? {};
   const haz = config.hazmat ?? {};
   const hazSrv = (haz.server ?? {}) as Partial<ServerConfig & HazmatServerExtras>;
-  const hazCli = haz.client ?? {};
-  const hazGlb = haz.global ?? {};
+  const hazCli = (haz.client ?? {}) as Partial<import("./lootbox-cli/types.ts").ClientConfig & HazmatClientExtras>;
+  const hazGlb = (haz.global ?? {}) as Partial<import("./lootbox-cli/types.ts").GlobalConfig & HazmatGlobalExtras>;
 
   // --- Port -----------------------------------------------------------
   const port = (() => {
@@ -377,6 +396,52 @@ export const get_config = async (): Promise<ResolvedConfig> => {
     return `ws://localhost:${port}/ws`;
   })();
 
+  // --- Hazmat: server internals (no CLI flags) ------------------------
+  const workerShutdownGrace =
+    hazSrv.workerShutdownGrace ?? DEFAULT_WORKER_SHUTDOWN_GRACE_MS;
+  const fileWatchDebounce =
+    hazSrv.fileWatchDebounce ?? DEFAULT_FILE_WATCH_DEBOUNCE_MS;
+  const maxWorkerBackoff =
+    hazSrv.maxWorkerBackoff ?? DEFAULT_MAX_WORKER_BACKOFF_MS;
+  const maxWorkerRestarts =
+    hazSrv.maxWorkerRestarts ?? DEFAULT_MAX_WORKER_RESTARTS;
+  const workerBackoffBase =
+    hazSrv.workerBackoffBase ?? DEFAULT_WORKER_BACKOFF_BASE_MS;
+  const serverStartDelay =
+    hazSrv.serverStartDelay ?? DEFAULT_SERVER_START_DELAY_MS;
+  const workerPollInterval =
+    hazSrv.workerPollInterval ?? DEFAULT_WORKER_POLL_INTERVAL_MS;
+  const dbFilename =
+    hazSrv.dbFilename ?? DEFAULT_DB_FILENAME;
+  const workerWsPath =
+    hazSrv.workerWsPath ?? DEFAULT_WORKER_WS_PATH;
+  const healthPath =
+    hazSrv.healthPath ?? DEFAULT_HEALTH_PATH;
+  const toolFileExtension =
+    hazSrv.toolFileExtension ?? DEFAULT_TOOL_FILE_EXTENSION;
+  const openApiTitle =
+    hazSrv.openApiTitle ?? DEFAULT_OPENAPI_TITLE;
+  const mcpClientName =
+    hazSrv.mcpClientName ?? DEFAULT_MCP_CLIENT_NAME;
+
+  // --- Hazmat: client internals ---------------------------------------
+  const autoDisconnectDelay = (() => {
+    const n = resolveNumber(
+      undefined, // no CLI flag
+      hazCli.autoDisconnectDelay,
+      cli_.autoDisconnectDelay,
+    );
+    return n ?? DEFAULT_AUTO_DISCONNECT_DELAY_MS;
+  })();
+  const workflowStateFile =
+    hazCli.workflowStateFile ?? DEFAULT_WORKFLOW_STATE_FILE;
+  const reconnectDelay =
+    hazCli.reconnectDelay ?? DEFAULT_RECONNECT_DELAY_MS;
+
+  // --- Hazmat: global internals ---------------------------------------
+  const wsPath =
+    hazGlb.wsPath ?? DEFAULT_WS_PATH;
+
   // --- Return ---------------------------------------------------------
   return {
     lootbox_root: lootboxRoot,
@@ -390,7 +455,32 @@ export const get_config = async (): Promise<ResolvedConfig> => {
     rpc_timeout: rpcTimeout,
     worker_ready_timeout: workerReadyTimeout,
     permission_flags: permissionFlags,
+
+    // Server – hazmat (resolved flat)
+    worker_shutdown_grace: workerShutdownGrace,
+    file_watch_debounce: fileWatchDebounce,
+    max_worker_backoff: maxWorkerBackoff,
+    max_worker_restarts: maxWorkerRestarts,
+    worker_backoff_base: workerBackoffBase,
+    server_start_delay: serverStartDelay,
+    worker_poll_interval: workerPollInterval,
+    db_filename: dbFilename,
+    worker_ws_path: workerWsPath,
+    health_path: healthPath,
+    tool_file_extension: toolFileExtension,
+    openapi_title: openApiTitle,
+    mcp_client_name: mcpClientName,
+
+    // Client
     server_url: serverUrl,
     client_timeout: clientTimeout,
+    auto_disconnect_delay: autoDisconnectDelay,
+
+    // Client – hazmat (resolved flat)
+    workflow_state_file: workflowStateFile,
+    reconnect_delay: reconnectDelay,
+
+    // Global – hazmat (resolved flat)
+    ws_path: wsPath,
   };
 };

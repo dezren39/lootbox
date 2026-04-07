@@ -1,9 +1,12 @@
 // Type-safe RPC client for LLM scripts
 
+import { DEFAULT_PORT, DEFAULT_WS_PATH, DEFAULT_RECONNECT_DELAY_MS, CLIENT_TIMEOUT_FLOOR_MS } from "../constants.ts";
+
 export interface RpcClientConfig {
   url?: string;
   timeout?: number;
   autoReconnect?: boolean;
+  reconnectDelay?: number;
 }
 
 export class RpcClient {
@@ -22,9 +25,10 @@ export class RpcClient {
 
   constructor(config: RpcClientConfig = {}) {
     this.config = {
-      url: config.url || "ws://localhost:3000/ws",
-      timeout: config.timeout || 30000,
+      url: config.url || `ws://localhost:${DEFAULT_PORT}${DEFAULT_WS_PATH}`,
+      timeout: config.timeout || CLIENT_TIMEOUT_FLOOR_MS,
       autoReconnect: config.autoReconnect ?? true,
+      reconnectDelay: config.reconnectDelay ?? DEFAULT_RECONNECT_DELAY_MS,
     };
   }
 
@@ -73,7 +77,7 @@ export class RpcClient {
 
       this.ws.onclose = () => {
         if (this.config.autoReconnect) {
-          setTimeout(() => this.connect(), 1000);
+          setTimeout(() => this.connect(), this.config.reconnectDelay);
         }
       };
     }).finally(() => {

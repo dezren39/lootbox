@@ -7,6 +7,7 @@ export interface ClientGeneratorOptions {
   clientClassName: string;
   websocketUrl: string;
   timeout: number;
+  autoDisconnectDelay: number;
 }
 
 export interface NamespaceInfo {
@@ -23,6 +24,7 @@ export class ClientGenerator {
     clientClassName: "RpcClient",
     websocketUrl: "ws://localhost:3000/ws",
     timeout: 10000,
+    autoDisconnectDelay: 100,
   };
 
   /**
@@ -42,7 +44,7 @@ export class ClientGenerator {
 
     code += this.generateRpcClientInterface(extractionResults);
     code += this.generateClientImplementation(opts);
-    code += this.generateTypedProxy(extractionResults);
+    code += this.generateTypedProxy(extractionResults, opts);
 
     return code;
   }
@@ -68,7 +70,7 @@ export class ClientGenerator {
 
     code += this.generateRpcClientInterfaceWithMcp(rpcResults, mcpResults);
     code += this.generateClientImplementation(opts);
-    code += this.generateTypedProxyWithMcp(rpcResults, mcpResults);
+    code += this.generateTypedProxyWithMcp(rpcResults, mcpResults, opts);
 
     return code;
   }
@@ -472,7 +474,7 @@ const client = new SimpleRpcClient();
   /**
    * Generate typed proxy with namespaces
    */
-  private generateTypedProxy(results: ExtractionResult[]): string {
+  private generateTypedProxy(results: ExtractionResult[], options: ClientGeneratorOptions): string {
     const grouped = this.groupFunctionsByNamespace(results);
 
     return `// Track active calls for auto-disconnect
@@ -499,7 +501,7 @@ function createRpcCall(method: string) {
       if (activeCalls === 0) {
         disconnectTimer = setTimeout(() => {
           client.disconnect();
-        }, 100); // 100ms delay for quick successive calls
+        }, ${options.autoDisconnectDelay}); // auto-disconnect delay for quick successive calls
       }
     }
   };
@@ -557,7 +559,8 @@ ${Object.entries(grouped)
    */
   private generateTypedProxyWithMcp(
     rpcResults: ExtractionResult[],
-    mcpResults: ExtractionResult[]
+    mcpResults: ExtractionResult[],
+    options: ClientGeneratorOptions
   ): string {
     const rpcGrouped = this.groupFunctionsByNamespace(rpcResults);
     const mcpGrouped = this.groupFunctionsByNamespace(mcpResults);
@@ -672,7 +675,7 @@ function createRpcCall(method: string) {
       if (activeCalls === 0) {
         disconnectTimer = setTimeout(() => {
           client.disconnect();
-        }, 100); // 100ms delay for quick successive calls
+        }, ${options.autoDisconnectDelay}); // auto-disconnect delay for quick successive calls
       }
     }
   };

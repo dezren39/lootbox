@@ -22,6 +22,27 @@ export const DEFAULT_RPC_TIMEOUT_MS = 30_000;
 /** Maximum time to wait for all workers to become ready, in milliseconds. */
 export const DEFAULT_WORKER_READY_TIMEOUT_MS = 30_000;
 
+/** Grace period in ms before force-killing a worker on reload. */
+export const DEFAULT_WORKER_SHUTDOWN_GRACE_MS = 500;
+
+/** Debounce delay in ms for file-watcher events. */
+export const DEFAULT_FILE_WATCH_DEBOUNCE_MS = 100;
+
+/** Maximum backoff cap in ms for worker restart attempts. */
+export const DEFAULT_MAX_WORKER_BACKOFF_MS = 30_000;
+
+/** Circuit breaker: max worker restart attempts (0 = unlimited). */
+export const DEFAULT_MAX_WORKER_RESTARTS = 0;
+
+/** Base value in ms for exponential worker-restart backoff. */
+export const DEFAULT_WORKER_BACKOFF_BASE_MS = 1_000;
+
+/** Delay in ms after HTTP server starts before spawning workers. */
+export const DEFAULT_SERVER_START_DELAY_MS = 100;
+
+/** Polling interval in ms while waiting for worker readiness. */
+export const DEFAULT_WORKER_POLL_INTERVAL_MS = 100;
+
 // ── Client defaults ──────────────────────────────────────────────────
 /**
  * Additional milliseconds added on top of `timeout` for the client-side
@@ -40,6 +61,12 @@ export const DEFAULT_CLIENT_TIMEOUT_BUFFER_MS = 5_000;
  */
 export const CLIENT_TIMEOUT_FLOOR_MS = 30_000;
 
+/** Delay in ms before client auto-disconnects after all calls finish. */
+export const DEFAULT_AUTO_DISCONNECT_DELAY_MS = 100;
+
+/** Delay in ms before client attempts WebSocket reconnection. */
+export const DEFAULT_RECONNECT_DELAY_MS = 1_000;
+
 // ── Permissions defaults ─────────────────────────────────────────────
 /**
  * Default Deno permission flags applied to user-script execution when
@@ -50,9 +77,34 @@ export const CLIENT_TIMEOUT_FLOOR_MS = 30_000;
  */
 export const DEFAULT_PERMISSION_FLAGS: readonly string[] = ["--allow-net"];
 
+// ── Path / route defaults ────────────────────────────────────────────
 /**
  * Config file name searched for in the current working directory
  * when no --config flag is supplied.
  */
 export const DEFAULT_CONFIG_FILENAME = "lootbox.config.json";
+
+/** SQLite database filename inside the data directory. */
+export const DEFAULT_DB_FILENAME = "lootbox.db";
+
+/** WebSocket endpoint path for client connections. */
+export const DEFAULT_WS_PATH = "/ws";
+
+/** WebSocket endpoint path for worker connections. */
+export const DEFAULT_WORKER_WS_PATH = "/worker-ws";
+
+/** Health-check HTTP endpoint path. */
+export const DEFAULT_HEALTH_PATH = "/health";
+
+/** File extension used for tool/RPC file discovery. */
+export const DEFAULT_TOOL_FILE_EXTENSION = ".ts";
+
+/** Title used in the generated OpenAPI specification. */
+export const DEFAULT_OPENAPI_TITLE = "Lootbox API";
+
+/** Filename for persisted workflow state (client-side). */
+export const DEFAULT_WORKFLOW_STATE_FILE = ".lootbox-workflow.json";
+
+/** Identity string sent as MCP client name. */
+export const DEFAULT_MCP_CLIENT_NAME = "lootbox";
 

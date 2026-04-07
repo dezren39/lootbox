@@ -26,6 +26,14 @@ export interface WebSocketHandler {
   onError: (evt: Event, ws: WebSocketContext) => void;
 }
 
+export interface ClientConfigPayload {
+  client_timeout: number;
+  auto_disconnect_delay: number;
+  reconnect_delay: number;
+  ws_path: string;
+  server_url: string;
+}
+
 export class ConnectionManager {
   private clients = new Set<WebSocketContext>();
 
@@ -75,11 +83,12 @@ export class ConnectionManager {
   /**
    * Send welcome message to a newly connected client
    */
-  sendWelcome(ws: WebSocketContext, functions: string[]): void {
+  sendWelcome(ws: WebSocketContext, functions: string[], clientConfig?: ClientConfigPayload): void {
     ws.send(
       JSON.stringify({
         type: "welcome",
         functions,
+        ...(clientConfig && { config: clientConfig }),
       })
     );
   }
@@ -144,13 +153,14 @@ export class ConnectionManager {
    */
   createClientWebSocketHandler(
     messageRouter: MessageRouter,
-    availableFunctions: () => string[]
+    availableFunctions: () => string[],
+    getClientConfig?: () => ClientConfigPayload
   ): WebSocketHandler {
     return {
       onOpen: (_event, ws) => {
         console.error("WebSocket connected");
         this.addClient(ws);
-        this.sendWelcome(ws, availableFunctions());
+        this.sendWelcome(ws, availableFunctions(), getClientConfig?.());
       },
 
       onMessage: async (event, ws) => {

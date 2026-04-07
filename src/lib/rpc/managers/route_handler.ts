@@ -21,7 +21,8 @@ export class RouteHandler {
     private typeGeneratorManager: TypeGeneratorManager,
     private mcpIntegrationManager: McpIntegrationManager,
     private clientCacheGetter: () => { code: string },
-    private port: number
+    private port: number,
+    private healthPath: string = "/health"
   ) {}
 
   /**
@@ -36,7 +37,7 @@ export class RouteHandler {
    * Setup health and metadata routes
    */
   private setupHealthRoutes(app: Hono): void {
-    app.get("/health", (c) => {
+    app.get(this.healthPath, (c) => {
       return c.json({
         status: "ok",
         functions: this.rpcCacheManager.getFunctionNames(),

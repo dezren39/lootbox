@@ -85,6 +85,8 @@ export interface ClientConfig {
    * May be negative. Default 5 000.
    */
   clientTimeoutBuffer?: number;
+  /** Delay in ms before auto-disconnecting after all calls finish (default 100). */
+  autoDisconnectDelay?: number;
 }
 
 /** Settings that apply to both server and client. */
@@ -96,8 +98,8 @@ export interface GlobalConfig {
 /** Hazmat (internal) overrides – mirrors the same structure. */
 export interface HazmatConfig {
   server?: Partial<ServerConfig & HazmatServerExtras>;
-  client?: Partial<ClientConfig>;
-  global?: Partial<GlobalConfig>;
+  client?: Partial<ClientConfig & HazmatClientExtras>;
+  global?: Partial<GlobalConfig & HazmatGlobalExtras>;
 }
 
 /**
@@ -108,6 +110,52 @@ export interface HazmatConfig {
 export interface HazmatServerExtras {
   /** Max time to wait for workers to become ready in ms (default 30 000). */
   workerReadyTimeout?: number;
+  /** Grace period in ms before force-killing a worker on reload (default 500). */
+  workerShutdownGrace?: number;
+  /** Debounce delay in ms for file-watcher events (default 100). */
+  fileWatchDebounce?: number;
+  /** Maximum backoff cap in ms for worker restart (default 30 000). */
+  maxWorkerBackoff?: number;
+  /** Circuit breaker: max worker restart attempts; 0 = unlimited (default 0). */
+  maxWorkerRestarts?: number;
+  /** Base value in ms for exponential worker-restart backoff (default 1 000). */
+  workerBackoffBase?: number;
+  /** Delay in ms after HTTP start before spawning workers (default 100). */
+  serverStartDelay?: number;
+  /** Polling interval in ms while waiting for worker readiness (default 100). */
+  workerPollInterval?: number;
+  /** SQLite database filename (default "lootbox.db"). */
+  dbFilename?: string;
+  /** WebSocket path for worker connections (default "/worker-ws"). */
+  workerWsPath?: string;
+  /** Health-check endpoint path (default "/health"). */
+  healthPath?: string;
+  /** File extension for tool discovery (default ".ts"). */
+  toolFileExtension?: string;
+  /** Title for the OpenAPI spec (default "Lootbox API"). */
+  openApiTitle?: string;
+  /** MCP client identity string (default "lootbox"). */
+  mcpClientName?: string;
+}
+
+/**
+ * Extra fields that are only valid inside hazmat.client.
+ */
+export interface HazmatClientExtras {
+  /** Filename for persisted workflow state (default ".lootbox-workflow.json"). */
+  workflowStateFile?: string;
+  /** Delay in ms before client attempts reconnection (default 1 000). */
+  reconnectDelay?: number;
+}
+
+/**
+ * Extra fields that are only valid inside hazmat.global.
+ */
+export interface HazmatGlobalExtras {
+  /** WebSocket endpoint path for client connections (default "/ws"). */
+  wsPath?: string;
+  /** Config filename (default "lootbox.config.json"). */
+  configFilename?: string;
 }
 
 /** Root config file schema. */
@@ -153,9 +201,32 @@ export interface ResolvedConfig {
    */
   permission_flags: string[];
 
+  // Server – hazmat (resolved, not behind .hazmat)
+  worker_shutdown_grace: number;
+  file_watch_debounce: number;
+  max_worker_backoff: number;
+  max_worker_restarts: number;
+  worker_backoff_base: number;
+  server_start_delay: number;
+  worker_poll_interval: number;
+  db_filename: string;
+  worker_ws_path: string;
+  health_path: string;
+  tool_file_extension: string;
+  openapi_title: string;
+  mcp_client_name: string;
+
   // Client
   server_url: string;
   client_timeout: number;
+  auto_disconnect_delay: number;
+
+  // Client – hazmat (resolved)
+  workflow_state_file: string;
+  reconnect_delay: number;
+
+  // Global – hazmat (resolved)
+  ws_path: string;
 }
 
 // ── Workflow state ───────────────────────────────────────────────────

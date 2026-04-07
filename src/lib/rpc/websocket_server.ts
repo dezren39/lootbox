@@ -16,7 +16,7 @@ import { upgradeWebSocket } from "@hono/hono/deno";
 import type { Spinner } from "@std/cli/unstable-spinner";
 import { get_client, set_client } from "../client_cache.ts";
 import type { McpConfigFile } from "../external-mcps/mcp_config.ts";
-import { WorkerManager } from "./worker_manager.ts";
+import { WorkerManager, type WorkerManagerConfig } from "./worker_manager.ts";
 import { RpcCacheManager } from "./managers/rpc_cache_manager.ts";
 import { FileWatcherManager } from "./managers/file_watcher_manager.ts";
 import { TypeGeneratorManager } from "./managers/type_generator_manager.ts";
@@ -40,6 +40,11 @@ export class WebSocketRpcServer {
   private workerManager: WorkerManager | null = null;
 
   private currentPort = 0;
+  private workerWsPath = "/worker-ws";
+  private wsPath = "/ws";
+  private healthPath = "/health";
+  private openApiTitle = "Lootbox API";
+  private clientConfigValues: import("./managers/connection_manager.ts").ClientConfigPayload | null = null;
 
   constructor() {
     // Initialize independent managers
@@ -76,7 +81,9 @@ export class WebSocketRpcServer {
           : undefined;
         const clientCode = await this.typeGeneratorManager.generateClientCode(
           this.currentPort,
-          schemas
+          schemas,
+          this.clientConfigValues?.client_timeout,
+          this.clientConfigValues?.auto_disconnect_delay,
         );
         set_client(clientCode);
       } catch (err) {
@@ -107,6 +114,15 @@ export class WebSocketRpcServer {
     const { get_config } = await import("../get_config.ts");
     const config = await get_config();
 
+    // Store client config values for WebSocket welcome messages
+    this.clientConfigValues = {
+      client_timeout: config.client_timeout,
+      auto_disconnect_delay: config.auto_disconnect_delay,
+      reconnect_delay: config.reconnect_delay,
+      ws_path: config.ws_path,
+      server_url: config.server_url,
+    };
+
     // Phase 1 & 2: Load RPC cache and initialize MCP in parallel
     await Promise.all([
       this.rpcCacheManager.refreshCache(),
@@ -121,6 +137,7 @@ export class WebSocketRpcServer {
       port,
       schemas,
       config.timeout,
+      config.auto_disconnect_delay,
     );
     set_client(clientCode);
 
@@ -128,25 +145,38 @@ export class WebSocketRpcServer {
     this.wireManagers();
 
     // Phase 4: Setup message routing
-    this.workerManager = new WorkerManager(port, config.rpc_timeout);
+    this.workerManager = new WorkerManager({
+      port,
+      rpcTimeout: config.rpc_timeout,
+      workerShutdownGrace: config.worker_shutdown_grace,
+      maxWorkerBackoff: config.max_worker_backoff,
+      maxWorkerRestarts: config.max_worker_restarts,
+      workerBackoffBase: config.worker_backoff_base,
+      workerPollInterval: config.worker_poll_interval,
+      workerWsPath: config.worker_ws_path,
+    });
     this.messageRouter = new MessageRouter(
       this.workerManager,
       this.mcpIntegrationManager
     );
 
     // Phase 5: Setup HTTP routes with OpenAPI documentation
+    this.workerWsPath = config.worker_ws_path;
+    this.wsPath = config.ws_path;
+    this.healthPath = config.health_path;
+    this.openApiTitle = config.openapi_title;
     this.setupRoutes();
 
     // Phase 7: Start file watcher
     this.fileWatcherManager.startWatching(config.tools_dir, async () => {
       await this.rpcCacheManager.refreshCache();
-    });
+    }, config.file_watch_debounce);
 
     // Phase 8: Start HTTP server
     Deno.serve({ port, onListen: () => {} }, this.app.fetch);
 
     // Give server time to start
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, config.server_start_delay));
 
     // Phase 9: Initialize workers
     const uniqueFiles = this.rpcCacheManager.getUniqueFiles();
@@ -204,7 +234,9 @@ export class WebSocketRpcServer {
       this.typeGeneratorManager,
       this.mcpIntegrationManager,
       get_client,
-      this.currentPort
+      this.currentPort,
+      this.healthPath,
+      this.openApiTitle
     );
     openApiHandler.setupRoutes();
 
@@ -224,7 +256,7 @@ export class WebSocketRpcServer {
     const honoApp = this.app as unknown as Hono;
 
     honoApp.get(
-      "/worker-ws",
+      this.workerWsPath,
       upgradeWebSocket(() => {
         return this.connectionManager.createWorkerWebSocketHandler(
           this.workerManager!
@@ -233,11 +265,12 @@ export class WebSocketRpcServer {
     );
 
     honoApp.get(
-      "/ws",
+      this.wsPath,
       upgradeWebSocket(() => {
         return this.connectionManager.createClientWebSocketHandler(
           this.messageRouter,
-          () => this.rpcCacheManager.getFunctionNames()
+          () => this.rpcCacheManager.getFunctionNames(),
+          () => this.clientConfigValues!
         );
       })
     );

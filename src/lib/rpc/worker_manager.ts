@@ -209,14 +209,37 @@ type WorkerIncomingMessage =
   | ErrorMessage
   | CrashMessage;
 
+export interface WorkerManagerConfig {
+  port: number;
+  rpcTimeout: number;
+  workerShutdownGrace: number;
+  maxWorkerBackoff: number;
+  maxWorkerRestarts: number;
+  workerBackoffBase: number;
+  workerPollInterval: number;
+  workerWsPath: string;
+}
+
 export class WorkerManager {
   private workers = new Map<string, WorkerState>();
   private port: number;
   private rpcTimeout: number;
+  private workerShutdownGrace: number;
+  private maxWorkerBackoff: number;
+  private maxWorkerRestarts: number;
+  private workerBackoffBase: number;
+  private workerPollInterval: number;
+  private workerWsPath: string;
 
-  constructor(port: number, rpcTimeout: number = 30000) {
-    this.port = port;
-    this.rpcTimeout = rpcTimeout;
+  constructor(config: WorkerManagerConfig) {
+    this.port = config.port;
+    this.rpcTimeout = config.rpcTimeout;
+    this.workerShutdownGrace = config.workerShutdownGrace;
+    this.maxWorkerBackoff = config.maxWorkerBackoff;
+    this.maxWorkerRestarts = config.maxWorkerRestarts;
+    this.workerBackoffBase = config.workerBackoffBase;
+    this.workerPollInterval = config.workerPollInterval;
+    this.workerWsPath = config.workerWsPath;
   }
 
   /**
@@ -230,7 +253,7 @@ export class WorkerManager {
     await Deno.writeTextFile(tempFile, RPC_WORKER_CODE);
 
     // Spawn worker process
-    const workerWsUrl = `ws://localhost:${this.port}/worker-ws`;
+    const workerWsUrl = `ws://localhost:${this.port}${this.workerWsPath}`;
     const command = new Deno.Command("deno", {
       args: [
         "run",
@@ -443,7 +466,17 @@ export class WorkerManager {
 
     // Worker was previously healthy, attempt restart with backoff
     worker.status = "crashed";
-    const backoffMs = Math.min(1000 * Math.pow(2, worker.restartCount), 30000);
+
+    // Circuit breaker: stop restarting after max attempts
+    if (this.maxWorkerRestarts > 0 && worker.restartCount >= this.maxWorkerRestarts) {
+      worker.status = "failed";
+      console.error(
+        `[WorkerManager] Worker ${workerId} exceeded max restarts (${this.maxWorkerRestarts}) - not retrying.`
+      );
+      return;
+    }
+
+    const backoffMs = Math.min(this.workerBackoffBase * Math.pow(2, worker.restartCount), this.maxWorkerBackoff);
     worker.restartCount++;
 
     console.error(
@@ -479,7 +512,7 @@ export class WorkerManager {
       }
 
       // Wait a bit for graceful shutdown
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, this.workerShutdownGrace));
 
       // Force kill if still alive
       try {
@@ -519,7 +552,7 @@ export class WorkerManager {
         return;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, this.workerPollInterval));
     }
 
     const notReady = Array.from(this.workers.values()).filter(
