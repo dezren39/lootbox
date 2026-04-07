@@ -12,6 +12,45 @@ export interface McpServerConfig {
   env?: Record<string, string>;
 }
 
+// ── MCP health monitoring configuration ──────────────────────────────
+/**
+ * Per-server health-check and reconnection settings.
+ * All fields are optional; unset values fall through to global
+ * hazmat.server defaults, then to constants.ts defaults.
+ */
+export interface McpHealthConfig {
+  /** Interval in ms between health-check probes (default 30 000). */
+  checkInterval?: number;
+  /** Max reconnection attempts before marking as failed; 0 = unlimited (default 5). */
+  maxReconnectAttempts?: number;
+  /** Base value in ms for exponential reconnection backoff (default 2 000). */
+  reconnectBackoffBase?: number;
+  /** Maximum backoff cap in ms for reconnection attempts (default 60 000). */
+  maxReconnectBackoff?: number;
+  /** Timeout in ms for a single health-check probe (default 5 000). */
+  checkTimeout?: number;
+}
+
+// ── MCP multi-client configuration ───────────────────────────────────
+/**
+ * Per-server multi-client strategy settings.
+ *
+ *   "warn"        – log a warning when a conflict is detected but proceed
+ *   "fail"        – refuse to connect if a conflicting session exists
+ *   "auto-port"   – auto-increment the port to avoid conflicts
+ *   "per-session"  – each session spawns its own server process (stdio default)
+ */
+export type McpMultiClientStrategy = "warn" | "fail" | "auto-port" | "per-session";
+
+export interface McpMultiClientConfig {
+  /** Conflict-resolution strategy (default "warn"). */
+  strategy?: McpMultiClientStrategy;
+  /** Port range for auto-port assignment, e.g. [9222, 9299] (default [9222, 9299]). */
+  portRange?: [number, number];
+  /** The CLI arg pattern whose port value should be rewritten, e.g. "--browserUrl". */
+  portArgPattern?: string;
+}
+
 // ── Permissions ──────────────────────────────────────────────────────
 /**
  * Flexible permission specification for user-script execution.
@@ -136,6 +175,22 @@ export interface HazmatServerExtras {
   openApiTitle?: string;
   /** MCP client identity string (default "lootbox"). */
   mcpClientName?: string;
+
+  // ── MCP health monitoring (global defaults) ──────────────────────
+  /** Default interval in ms between MCP health-check probes (default 30 000). */
+  mcpHealthCheckInterval?: number;
+  /** Default max MCP reconnection attempts; 0 = unlimited (default 5). */
+  mcpMaxReconnectAttempts?: number;
+  /** Default base value in ms for MCP reconnection backoff (default 2 000). */
+  mcpReconnectBackoffBase?: number;
+  /** Default max backoff cap in ms for MCP reconnection (default 60 000). */
+  mcpMaxReconnectBackoff?: number;
+  /** Default timeout in ms for a single MCP health-check probe (default 5 000). */
+  mcpHealthCheckTimeout?: number;
+
+  // ── MCP multi-client (global default) ────────────────────────────
+  /** Default multi-client strategy for all MCP servers (default "warn"). */
+  mcpDefaultMultiClientStrategy?: McpMultiClientStrategy;
 }
 
 /**
@@ -214,6 +269,16 @@ export interface ResolvedConfig {
   tool_file_extension: string;
   openapi_title: string;
   mcp_client_name: string;
+
+  // MCP health monitoring (global defaults, resolved)
+  mcp_health_check_interval: number;
+  mcp_max_reconnect_attempts: number;
+  mcp_reconnect_backoff_base: number;
+  mcp_max_reconnect_backoff: number;
+  mcp_health_check_timeout: number;
+
+  // MCP multi-client (global default, resolved)
+  mcp_default_multi_client_strategy: McpMultiClientStrategy;
 
   // Client
   server_url: string;

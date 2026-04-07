@@ -1,10 +1,16 @@
 // MCP server configuration management
 
+import type { McpHealthConfig, McpMultiClientConfig } from "../lootbox-cli/types.ts";
+
 /**
   McpServerConfig: add supports to all transports
 **/
 interface McpServerConfigBase {
   transport?: "stdio" | "streamable_http" | "sse";
+  /** Per-server health-check and reconnection overrides. */
+  health?: McpHealthConfig;
+  /** Per-server multi-client strategy overrides. */
+  multiClient?: McpMultiClientConfig;
 }
 
 interface McpServerConfigStdio extends McpServerConfigBase {
@@ -126,6 +132,85 @@ export function validateMcpConfig(config: unknown): McpConfigFile {
         );
       }
       validatedConfig.env = env as Record<string, string>;
+    }
+
+    // Parse optional per-server health config
+    if (cfg.health !== undefined) {
+      if (typeof cfg.health !== "object" || cfg.health === null) {
+        throw new Error(`Server '${serverName}' health must be an object`);
+      }
+      const h = cfg.health as Record<string, unknown>;
+      const healthConfig: McpHealthConfig = {};
+      if (h.checkInterval !== undefined) {
+        if (typeof h.checkInterval !== "number" || h.checkInterval <= 0) {
+          throw new Error(`Server '${serverName}' health.checkInterval must be a positive number`);
+        }
+        healthConfig.checkInterval = h.checkInterval;
+      }
+      if (h.maxReconnectAttempts !== undefined) {
+        if (typeof h.maxReconnectAttempts !== "number" || h.maxReconnectAttempts < 0) {
+          throw new Error(`Server '${serverName}' health.maxReconnectAttempts must be >= 0`);
+        }
+        healthConfig.maxReconnectAttempts = h.maxReconnectAttempts;
+      }
+      if (h.reconnectBackoffBase !== undefined) {
+        if (typeof h.reconnectBackoffBase !== "number" || h.reconnectBackoffBase <= 0) {
+          throw new Error(`Server '${serverName}' health.reconnectBackoffBase must be a positive number`);
+        }
+        healthConfig.reconnectBackoffBase = h.reconnectBackoffBase;
+      }
+      if (h.maxReconnectBackoff !== undefined) {
+        if (typeof h.maxReconnectBackoff !== "number" || h.maxReconnectBackoff <= 0) {
+          throw new Error(`Server '${serverName}' health.maxReconnectBackoff must be a positive number`);
+        }
+        healthConfig.maxReconnectBackoff = h.maxReconnectBackoff;
+      }
+      if (h.checkTimeout !== undefined) {
+        if (typeof h.checkTimeout !== "number" || h.checkTimeout <= 0) {
+          throw new Error(`Server '${serverName}' health.checkTimeout must be a positive number`);
+        }
+        healthConfig.checkTimeout = h.checkTimeout;
+      }
+      validatedConfig.health = healthConfig;
+    }
+
+    // Parse optional per-server multi-client config
+    if (cfg.multiClient !== undefined) {
+      if (typeof cfg.multiClient !== "object" || cfg.multiClient === null) {
+        throw new Error(`Server '${serverName}' multiClient must be an object`);
+      }
+      const mc = cfg.multiClient as Record<string, unknown>;
+      const multiClientConfig: McpMultiClientConfig = {};
+      if (mc.strategy !== undefined) {
+        const validStrategies = ["warn", "fail", "auto-port", "per-session"];
+        if (typeof mc.strategy !== "string" || !validStrategies.includes(mc.strategy)) {
+          throw new Error(
+            `Server '${serverName}' multiClient.strategy must be one of: ${validStrategies.join(", ")}`
+          );
+        }
+        multiClientConfig.strategy = mc.strategy as McpMultiClientConfig["strategy"];
+      }
+      if (mc.portRange !== undefined) {
+        if (
+          !Array.isArray(mc.portRange) ||
+          mc.portRange.length !== 2 ||
+          typeof mc.portRange[0] !== "number" ||
+          typeof mc.portRange[1] !== "number" ||
+          mc.portRange[0] > mc.portRange[1]
+        ) {
+          throw new Error(
+            `Server '${serverName}' multiClient.portRange must be [start, end] with start <= end`
+          );
+        }
+        multiClientConfig.portRange = mc.portRange as [number, number];
+      }
+      if (mc.portArgPattern !== undefined) {
+        if (typeof mc.portArgPattern !== "string") {
+          throw new Error(`Server '${serverName}' multiClient.portArgPattern must be a string`);
+        }
+        multiClientConfig.portArgPattern = mc.portArgPattern;
+      }
+      validatedConfig.multiClient = multiClientConfig;
     }
 
     // Sanitize server name to ensure it's a valid identifier

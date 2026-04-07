@@ -7,6 +7,7 @@ import type {
   HazmatClientExtras,
   HazmatGlobalExtras,
   HazmatServerExtras,
+  McpMultiClientStrategy,
   McpServerConfig,
   PermissionsConfig,
   ResolvedConfig,
@@ -44,6 +45,12 @@ import {
   DEFAULT_OPENAPI_TITLE,
   DEFAULT_WORKFLOW_STATE_FILE,
   DEFAULT_MCP_CLIENT_NAME,
+  DEFAULT_MCP_HEALTH_CHECK_INTERVAL_MS,
+  DEFAULT_MCP_MAX_RECONNECT_ATTEMPTS,
+  DEFAULT_MCP_RECONNECT_BACKOFF_BASE_MS,
+  DEFAULT_MCP_MAX_RECONNECT_BACKOFF_MS,
+  DEFAULT_MCP_HEALTH_CHECK_TIMEOUT_MS,
+  DEFAULT_MCP_MULTI_CLIENT_STRATEGY,
 } from "./constants.ts";
 
 // ── Config file loading ──────────────────────────────────────────────
@@ -449,6 +456,22 @@ const _resolve_config = async (): Promise<ResolvedConfig> => {
   const mcpClientName =
     hazSrv.mcpClientName ?? DEFAULT_MCP_CLIENT_NAME;
 
+  // --- Hazmat: MCP health monitoring (global defaults) ----------------
+  const mcpHealthCheckInterval =
+    hazSrv.mcpHealthCheckInterval ?? DEFAULT_MCP_HEALTH_CHECK_INTERVAL_MS;
+  const mcpMaxReconnectAttempts =
+    hazSrv.mcpMaxReconnectAttempts ?? DEFAULT_MCP_MAX_RECONNECT_ATTEMPTS;
+  const mcpReconnectBackoffBase =
+    hazSrv.mcpReconnectBackoffBase ?? DEFAULT_MCP_RECONNECT_BACKOFF_BASE_MS;
+  const mcpMaxReconnectBackoff =
+    hazSrv.mcpMaxReconnectBackoff ?? DEFAULT_MCP_MAX_RECONNECT_BACKOFF_MS;
+  const mcpHealthCheckTimeout =
+    hazSrv.mcpHealthCheckTimeout ?? DEFAULT_MCP_HEALTH_CHECK_TIMEOUT_MS;
+
+  // --- Hazmat: MCP multi-client (global default) ----------------------
+  const mcpDefaultMultiClientStrategy: McpMultiClientStrategy =
+    hazSrv.mcpDefaultMultiClientStrategy ?? DEFAULT_MCP_MULTI_CLIENT_STRATEGY;
+
   // --- Hazmat: client internals ---------------------------------------
   const autoDisconnectDelay = (() => {
     const n = resolveNumber(
@@ -494,6 +517,16 @@ const _resolve_config = async (): Promise<ResolvedConfig> => {
     tool_file_extension: toolFileExtension,
     openapi_title: openApiTitle,
     mcp_client_name: mcpClientName,
+
+    // MCP health monitoring (global defaults, resolved flat)
+    mcp_health_check_interval: mcpHealthCheckInterval,
+    mcp_max_reconnect_attempts: mcpMaxReconnectAttempts,
+    mcp_reconnect_backoff_base: mcpReconnectBackoffBase,
+    mcp_max_reconnect_backoff: mcpMaxReconnectBackoff,
+    mcp_health_check_timeout: mcpHealthCheckTimeout,
+
+    // MCP multi-client (global default, resolved flat)
+    mcp_default_multi_client_strategy: mcpDefaultMultiClientStrategy,
 
     // Client
     server_url: serverUrl,
