@@ -14,6 +14,7 @@ import type { Hono } from "@hono/hono";
 import type { RpcCacheManager } from "./rpc_cache_manager.ts";
 import type { TypeGeneratorManager } from "./type_generator_manager.ts";
 import type { McpIntegrationManager } from "./mcp_integration_manager.ts";
+import { DEFAULT_HEALTH_PATH } from "../../constants.ts";
 
 export class RouteHandler {
   constructor(
@@ -22,7 +23,7 @@ export class RouteHandler {
     private mcpIntegrationManager: McpIntegrationManager,
     private clientCacheGetter: () => { code: string },
     private port: number,
-    private healthPath: string = "/health"
+    private healthPath: string = DEFAULT_HEALTH_PATH
   ) {}
 
   /**

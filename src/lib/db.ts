@@ -3,6 +3,7 @@
 
 import { DB } from "https://deno.land/x/sqlite/mod.ts";
 import { join } from "jsr:@std/path";
+// db_filename is read from resolved config (supports hazmat override)
 
 /**
  * Get platform-specific data directory following XDG Base Directory spec
@@ -40,7 +41,7 @@ async function getDbPath(): Promise<string> {
   const { get_config } = await import("./get_config.ts");
   const config = await get_config();
   const baseDir = config.lootbox_data_dir || getDefaultDataDir();
-  return join(baseDir, "lootbox.db");
+  return join(baseDir, config.db_filename);
 }
 
 /**

@@ -1,6 +1,13 @@
 // Client code generation from extracted types
 
 import type { ExtractionResult } from "./types.ts";
+import {
+  DEFAULT_PORT,
+  DEFAULT_WS_PATH,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_AUTO_DISCONNECT_DELAY_MS,
+  DEFAULT_TOOL_FILE_EXTENSION,
+} from "../constants.ts";
 
 export interface ClientGeneratorOptions {
   includeInterfaces: boolean;
@@ -22,9 +29,9 @@ export class ClientGenerator {
   private defaultOptions: ClientGeneratorOptions = {
     includeInterfaces: true,
     clientClassName: "RpcClient",
-    websocketUrl: "ws://localhost:3000/ws",
-    timeout: 10000,
-    autoDisconnectDelay: 100,
+    websocketUrl: `ws://localhost:${DEFAULT_PORT}${DEFAULT_WS_PATH}`,
+    timeout: DEFAULT_TIMEOUT_MS,
+    autoDisconnectDelay: DEFAULT_AUTO_DISCONNECT_DELAY_MS,
   };
 
   /**
@@ -171,7 +178,7 @@ export class ClientGenerator {
    */
   private extractNamespace(sourceFile: string): string {
     const filename = sourceFile.split("/").pop() || sourceFile;
-    return filename.replace(".ts", "").replace(/[^a-zA-Z0-9]/g, "_");
+    return filename.replace(DEFAULT_TOOL_FILE_EXTENSION, "").replace(/[^a-zA-Z0-9]/g, "_");
   }
 
   /**

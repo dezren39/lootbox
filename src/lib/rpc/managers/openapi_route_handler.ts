@@ -28,6 +28,7 @@ import type { McpIntegrationManager } from "./mcp_integration_manager.ts";
 import type { RpcCacheManager } from "./rpc_cache_manager.ts";
 import type { TypeGeneratorManager } from "./type_generator_manager.ts";
 import { VERSION } from "../../../version.ts";
+import { DEFAULT_HEALTH_PATH, DEFAULT_OPENAPI_TITLE } from "../../constants.ts";
 
 export class OpenApiRouteHandler {
   constructor(
@@ -37,8 +38,8 @@ export class OpenApiRouteHandler {
     private mcpIntegrationManager: McpIntegrationManager,
     private clientCacheGetter: () => { code: string },
     private port: number,
-    private healthPath: string = "/health",
-    private openApiTitle: string = "Lootbox API"
+    private healthPath: string = DEFAULT_HEALTH_PATH,
+    private openApiTitle: string = DEFAULT_OPENAPI_TITLE
   ) {}
 
   setupRoutes(): void {

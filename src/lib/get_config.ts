@@ -393,7 +393,7 @@ export const get_config = async (): Promise<ResolvedConfig> => {
     if (hazCli.serverUrl) return hazCli.serverUrl;
     if (cli_.serverUrl) return cli_.serverUrl;
     if (config.serverUrl) return config.serverUrl;
-    return `ws://localhost:${port}/ws`;
+    return `ws://localhost:${port}${hazGlb.wsPath ?? DEFAULT_WS_PATH}`;
   })();
 
   // --- Hazmat: server internals (no CLI flags) ------------------------

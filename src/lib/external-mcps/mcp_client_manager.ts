@@ -10,10 +10,12 @@ import { VERSION } from "../../version.ts";
 export class McpClientManager {
   private clients: Map<string, Client>;
   private connectionStatus: Map<string, "connected" | "failed">;
+  private clientName: string;
 
-  constructor() {
+  constructor(clientName: string) {
     this.clients = new Map();
     this.connectionStatus = new Map();
+    this.clientName = clientName;
   }
 
   /**
@@ -71,7 +73,7 @@ export class McpClientManager {
 
       const client = new Client(
         {
-          name: "lootbox",
+          name: this.clientName,
           version: VERSION,
         },
         {

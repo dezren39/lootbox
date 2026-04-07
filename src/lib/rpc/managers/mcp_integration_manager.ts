@@ -24,10 +24,10 @@ export class McpIntegrationManager {
   /**
    * Initialize MCP integration with provided configuration
    */
-  async initialize(mcpConfig: McpConfigFile): Promise<void> {
+  async initialize(mcpConfig: McpConfigFile, mcpClientName?: string): Promise<void> {
     console.error("Initializing MCP integration...");
 
-    const clientManager = new McpClientManager();
+    const clientManager = new McpClientManager(mcpClientName ?? "lootbox");
     await clientManager.initializeClients(mcpConfig.mcpServers);
 
     const schemaFetcher = new McpSchemaFetcher();

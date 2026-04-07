@@ -1,6 +1,7 @@
 // File system abstraction layer for testability
 
 import type { RpcFileInfo } from "./types.ts";
+import { DEFAULT_TOOL_FILE_EXTENSION } from "../constants.ts";
 
 export interface FileSystemAdapter {
   discoverRpcFiles(directory: string): Promise<RpcFileInfo[]>;
@@ -9,6 +10,8 @@ export interface FileSystemAdapter {
 }
 
 export class DenoFileSystemAdapter implements FileSystemAdapter {
+  constructor(private ext: string = DEFAULT_TOOL_FILE_EXTENSION) {}
+
   async discoverRpcFiles(directory: string): Promise<RpcFileInfo[]> {
     const files: RpcFileInfo[] = [];
 
@@ -20,10 +23,10 @@ export class DenoFileSystemAdapter implements FileSystemAdapter {
       }
 
       for await (const entry of Deno.readDir(directory)) {
-        if (entry.isFile && entry.name.endsWith(".ts")) {
+        if (entry.isFile && entry.name.endsWith(this.ext)) {
           const filePath = `${directory}/${entry.name}`;
           const absolutePath = await Deno.realPath(filePath);
-          const name = entry.name.replace(".ts", "");
+          const name = entry.name.replace(this.ext, "");
           const stats = await Deno.stat(absolutePath);
 
           files.push({
@@ -54,7 +57,7 @@ export class DenoFileSystemAdapter implements FileSystemAdapter {
     try {
       const watcher = Deno.watchFs(directory);
       for await (const event of watcher) {
-        if (event.kind === "modify" && event.paths.some((p) => p.endsWith(".ts"))) {
+        if (event.kind === "modify" && event.paths.some((p) => p.endsWith(this.ext))) {
           const files = await this.discoverRpcFiles(directory);
           callback(files);
         }
@@ -68,6 +71,8 @@ export class DenoFileSystemAdapter implements FileSystemAdapter {
 export class MockFileSystemAdapter implements FileSystemAdapter {
   private files = new Map<string, string>();
   private directories = new Set<string>();
+
+  constructor(private ext: string = DEFAULT_TOOL_FILE_EXTENSION) {}
 
   addFile(path: string, content: string): void {
     this.files.set(path, content);
@@ -88,9 +93,9 @@ export class MockFileSystemAdapter implements FileSystemAdapter {
     }
 
     const files = Array.from(this.files.keys())
-      .filter((path) => path.startsWith(directory) && path.endsWith(".ts"))
+      .filter((path) => path.startsWith(directory) && path.endsWith(this.ext))
       .map((path) => ({
-        name: path.split("/").pop()!.replace(".ts", ""),
+        name: path.split("/").pop()!.replace(this.ext, ""),
         path,
         lastModified: new Date(),
       }));

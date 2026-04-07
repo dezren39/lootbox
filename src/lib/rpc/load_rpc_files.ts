@@ -2,14 +2,14 @@
 
 import { get_config } from "../get_config.ts";
 import { getUserLootboxToolsDir } from "../paths.ts";
-
 export interface RpcFile {
   name: string;
   path: string;
 }
 
 async function discoverToolsInDir(
-  toolsDir: string
+  toolsDir: string,
+  ext: string,
 ): Promise<Map<string, string>> {
   const tools = new Map<string, string>();
 
@@ -20,10 +20,10 @@ async function discoverToolsInDir(
     }
 
     for await (const entry of Deno.readDir(toolsDir)) {
-      if (entry.isFile && entry.name.endsWith(".ts")) {
+      if (entry.isFile && entry.name.endsWith(ext)) {
         const filePath = `${toolsDir}/${entry.name}`;
         const absolutePath = await Deno.realPath(filePath);
-        const name = entry.name.replace(".ts", "");
+        const name = entry.name.replace(ext, "");
         tools.set(name, absolutePath);
       }
     }
@@ -38,12 +38,13 @@ export const discover_rpc_files = async (): Promise<RpcFile[]> => {
   const config = await get_config();
   const projectToolsDir = config.tools_dir;
   const globalToolsDir = getUserLootboxToolsDir();
+  const ext = config.tool_file_extension;
 
   // Load from global tools directory (~/.lootbox/tools)
-  const globalTools = await discoverToolsInDir(globalToolsDir);
+  const globalTools = await discoverToolsInDir(globalToolsDir, ext);
 
   // Load from project tools directory (.lootbox/tools)
-  const projectTools = await discoverToolsInDir(projectToolsDir);
+  const projectTools = await discoverToolsInDir(projectToolsDir, ext);
 
   // Merge: project tools override global tools with same name
   const mergedTools = new Map([...globalTools, ...projectTools]);

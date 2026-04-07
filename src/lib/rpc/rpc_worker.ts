@@ -1,6 +1,8 @@
 // RPC Worker - Long-running process that executes RPC functions
 // One worker per RPC file, communicates with main server via WebSocket
 
+import { DEFAULT_RPC_TIMEOUT_MS } from "../constants.ts";
+
 interface CallMessage {
   type: "call";
   id: string;
@@ -19,7 +21,7 @@ async function main() {
   const rpcFilePath = Deno.args[0];
   const workerWsUrl = Deno.args[1];
   const namespace = Deno.args[2];
-  const rpcTimeoutMs = parseInt(Deno.args[3] || "30000", 10) || 30000;
+  const rpcTimeoutMs = parseInt(Deno.args[3] || String(DEFAULT_RPC_TIMEOUT_MS), 10) || DEFAULT_RPC_TIMEOUT_MS;
 
   if (!rpcFilePath || !workerWsUrl || !namespace) {
     console.error("Usage: rpc_worker.ts <rpcFilePath> <workerWsUrl> <namespace> [rpcTimeoutMs]");

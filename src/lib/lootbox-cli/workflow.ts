@@ -2,8 +2,13 @@ import { HandlebarsJS } from "https://deno.land/x/handlebars/mod.ts";
 import { parse as parseYaml } from "jsr:@std/yaml@^1.0.0";
 import { generateSessionId, logWorkflowEvent } from "../workflow_log.ts";
 import type { FlowState } from "./types.ts";
+import { get_config } from "../get_config.ts";
 
-const STATE_FILE = ".lootbox-workflow.json";
+/** Resolve the workflow state file path from config (supports hazmat override). */
+async function getStateFile(): Promise<string> {
+  const config = await get_config();
+  return config.workflow_state_file;
+}
 
 // Session ID for current workflow run (generated on start, persisted in state)
 let currentSessionId: string | null = null;
@@ -34,7 +39,8 @@ HandlebarsJS.registerHelper("gte", (a: number, b: number) => a >= b);
 
 export async function loadWorkflowState(): Promise<FlowState | null> {
   try {
-    const stateText = await Deno.readTextFile(STATE_FILE);
+    const stateFile = await getStateFile();
+    const stateText = await Deno.readTextFile(stateFile);
     const state = JSON.parse(stateText);
     currentSessionId = state.sessionId || null;
     return state;
@@ -44,12 +50,14 @@ export async function loadWorkflowState(): Promise<FlowState | null> {
 }
 
 export async function saveWorkflowState(state: FlowState): Promise<void> {
-  await Deno.writeTextFile(STATE_FILE, JSON.stringify(state, null, 2));
+  const stateFile = await getStateFile();
+  await Deno.writeTextFile(stateFile, JSON.stringify(state, null, 2));
 }
 
 export async function deleteWorkflowState(): Promise<void> {
   try {
-    await Deno.remove(STATE_FILE);
+    const stateFile = await getStateFile();
+    await Deno.remove(stateFile);
   } catch {
     // Ignore if file doesn't exist
   }
@@ -151,7 +159,6 @@ async function resolveWorkflowPath(file: string): Promise<string> {
     return file;
   } catch {
     // If not found, try in workflows directory
-    const { get_config } = await import("../get_config.ts");
     const config = await get_config();
     const fallbackPath = `${config.workflows_dir}/${file}`;
     try {

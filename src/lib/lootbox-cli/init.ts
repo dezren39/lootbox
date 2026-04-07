@@ -1,3 +1,5 @@
+import { DEFAULT_PORT } from "../constants.ts";
+
 export async function init(): Promise<void> {
   const lootboxDir = ".lootbox";
   const configFile = "lootbox.config.json";
@@ -33,7 +35,7 @@ export async function init(): Promise<void> {
 
   // Create config file with defaults
   const defaultConfig = {
-    port: 3000,
+    port: DEFAULT_PORT,
     lootboxRoot: ".lootbox",
   };
 

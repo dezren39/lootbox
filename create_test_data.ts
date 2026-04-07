@@ -1,6 +1,8 @@
 #!/usr/bin/env deno run --allow-net
 
-const ws = new WebSocket("ws://localhost:3000/ws");
+import { DEFAULT_PORT, DEFAULT_WS_PATH } from "./src/lib/constants.ts";
+
+const ws = new WebSocket(`ws://localhost:${DEFAULT_PORT}${DEFAULT_WS_PATH}`);
 await new Promise((r) => (ws.onopen = r));
 
 const rpc = (method: string, args: any) => {

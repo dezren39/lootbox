@@ -9,6 +9,8 @@
  * - Lifecycle control (start/stop watching)
  */
 
+import { DEFAULT_FILE_WATCH_DEBOUNCE_MS, DEFAULT_TOOL_FILE_EXTENSION } from "../../constants.ts";
+
 export class FileWatcherManager {
   private watcher: Deno.FsWatcher | null = null;
   private watching = false;
@@ -20,7 +22,8 @@ export class FileWatcherManager {
   startWatching(
     directory: string,
     onChange: () => Promise<void>,
-    debounceMs: number = 100
+    debounceMs: number = DEFAULT_FILE_WATCH_DEBOUNCE_MS,
+    fileExtension: string = DEFAULT_TOOL_FILE_EXTENSION,
   ): void {
     if (this.watching) {
       console.error("File watcher already running");
@@ -36,7 +39,7 @@ export class FileWatcherManager {
         try {
           for await (const event of this.watcher!) {
             // Only react to TypeScript file changes
-            if (event.paths.some((path) => path.endsWith(".ts"))) {
+            if (event.paths.some((path) => path.endsWith(fileExtension))) {
               // Debounce rapid file changes
               await new Promise((resolve) => setTimeout(resolve, debounceMs));
               await onChange();

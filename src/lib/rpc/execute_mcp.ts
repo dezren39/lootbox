@@ -5,6 +5,7 @@ import type {
   McpSchemaFetcher,
   McpResourceSchema,
 } from "../external-mcps/mcp_schema_fetcher.ts";
+import { DEFAULT_RPC_TIMEOUT_MS } from "../constants.ts";
 
 interface McpExecutionResult {
   success: boolean;
@@ -57,8 +58,8 @@ export async function executeMcpTool(
     // Execute with timeout using original name
     const result = await executeWithTimeout(
       client.callTool({ name: tool.originalName, arguments: args as Record<string, unknown> | undefined }),
-      30000,
-      `Tool call ${serverName}.${tool.originalName} timed out after 30 seconds`
+      DEFAULT_RPC_TIMEOUT_MS,
+      `Tool call ${serverName}.${tool.originalName} timed out after ${DEFAULT_RPC_TIMEOUT_MS / 1000} seconds`
     );
 
     console.error(`MCP tool ${serverName}.${tool.originalName} completed successfully`);
@@ -127,8 +128,8 @@ export async function executeMcpResource(
     // Execute with timeout
     const result = await executeWithTimeout(
       client.readResource({ uri }),
-      30000,
-      `Resource read ${serverName}.${resource.originalName} timed out after 30 seconds`
+      DEFAULT_RPC_TIMEOUT_MS,
+      `Resource read ${serverName}.${resource.originalName} timed out after ${DEFAULT_RPC_TIMEOUT_MS / 1000} seconds`
     );
 
     console.error(

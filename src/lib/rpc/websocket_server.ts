@@ -15,6 +15,12 @@ import type { Hono } from "@hono/hono";
 import { upgradeWebSocket } from "@hono/hono/deno";
 import type { Spinner } from "@std/cli/unstable-spinner";
 import { get_client, set_client } from "../client_cache.ts";
+import {
+  DEFAULT_WORKER_WS_PATH,
+  DEFAULT_WS_PATH,
+  DEFAULT_HEALTH_PATH,
+  DEFAULT_OPENAPI_TITLE,
+} from "../constants.ts";
 import type { McpConfigFile } from "../external-mcps/mcp_config.ts";
 import { WorkerManager, type WorkerManagerConfig } from "./worker_manager.ts";
 import { RpcCacheManager } from "./managers/rpc_cache_manager.ts";
@@ -40,10 +46,10 @@ export class WebSocketRpcServer {
   private workerManager: WorkerManager | null = null;
 
   private currentPort = 0;
-  private workerWsPath = "/worker-ws";
-  private wsPath = "/ws";
-  private healthPath = "/health";
-  private openApiTitle = "Lootbox API";
+  private workerWsPath = DEFAULT_WORKER_WS_PATH;
+  private wsPath = DEFAULT_WS_PATH;
+  private healthPath = DEFAULT_HEALTH_PATH;
+  private openApiTitle = DEFAULT_OPENAPI_TITLE;
   private clientConfigValues: import("./managers/connection_manager.ts").ClientConfigPayload | null = null;
 
   constructor() {
@@ -126,7 +132,7 @@ export class WebSocketRpcServer {
     // Phase 1 & 2: Load RPC cache and initialize MCP in parallel
     await Promise.all([
       this.rpcCacheManager.refreshCache(),
-      mcpConfig ? this.mcpIntegrationManager.initialize(mcpConfig) : Promise.resolve(),
+      mcpConfig ? this.mcpIntegrationManager.initialize(mcpConfig, config.mcp_client_name) : Promise.resolve(),
     ]);
 
     // Phase 2.5: Generate initial client code
@@ -170,7 +176,7 @@ export class WebSocketRpcServer {
     // Phase 7: Start file watcher
     this.fileWatcherManager.startWatching(config.tools_dir, async () => {
       await this.rpcCacheManager.refreshCache();
-    }, config.file_watch_debounce);
+    }, config.file_watch_debounce, config.tool_file_extension);
 
     // Phase 8: Start HTTP server
     Deno.serve({ port, onListen: () => {} }, this.app.fetch);
