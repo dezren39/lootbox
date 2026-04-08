@@ -117,32 +117,15 @@
           };
         };
 
-        # ── lootbox-full: lootbox + vendored chrome-devtools-mcp ────
-        #
-        # symlinkJoin merges both packages' bin/ dirs, and postBuild
-        # re-wraps the lootbox binary so chrome-devtools-mcp is always
-        # on its PATH — even when invoked via `nix run`, not just
-        # `nix profile install`.
+        # ── lootbox-full: lootbox + chrome-devtools-mcp ───────────────
+        # Convenience package that installs both to the same profile.
+        # When installed via `nix profile install`, both land on PATH.
         lootbox-full = pkgs.symlinkJoin {
           name = "lootbox-full-${version}";
           paths = [
             lootbox
             chrome-devtools-mcp
           ];
-          nativeBuildInputs = [ pkgs.makeWrapper ];
-
-          postBuild = ''
-            # Re-wrap lootbox so it can always find chrome-devtools-mcp
-            # (the original wrapper only adds deno to PATH)
-            rm $out/bin/lootbox
-            makeWrapper ${lootbox}/bin/.lootbox-unwrapped $out/bin/lootbox \
-              --prefix PATH : ${
-                pkgs.lib.makeBinPath [
-                  pkgs.deno
-                  chrome-devtools-mcp
-                ]
-              }
-          '';
 
           meta = with pkgs.lib; {
             description = "lootbox CLI with vendored chrome-devtools-mcp";
@@ -188,8 +171,10 @@
         };
 
         # Create global ~/.lootbox dirs and default config if missing.
-        # Auto-detects chrome-devtools-mcp on PATH and wires it into
-        # the mcpServers config when found.
+        # Detects chrome-devtools-mcp via:
+        #   1. command -v (user PATH — lootbox-full, npm, manual install)
+        #   2. nix-store -qR ~/.nix-profile (separate nix profile install)
+        # If found only via Nix store, uses the absolute store path in config.
         apps.setup = {
           type = "app";
           program = toString (
@@ -218,33 +203,43 @@
               fi
 
               # ── detect chrome-devtools-mcp ───────────────────────
-              has_cdp=false
+              cdp_cmd=""
+
+              # 1. On user PATH? (lootbox-full profile, npm -g, manual)
               if command -v chrome-devtools-mcp >/dev/null 2>&1; then
-                has_cdp=true
+                cdp_cmd="chrome-devtools-mcp"
                 echo "detected: chrome-devtools-mcp on PATH"
+
+              # 2. In nix profile closure? (separate nix profile install)
+              elif [ -e "$HOME/.nix-profile" ] && command -v nix-store >/dev/null 2>&1; then
+                cdp_store="$(nix-store -qR "$HOME/.nix-profile" 2>/dev/null | grep chrome-devtools-mcp || true)"
+                if [ -n "$cdp_store" ] && [ -x "$cdp_store/bin/chrome-devtools-mcp" ]; then
+                  cdp_cmd="$cdp_store/bin/chrome-devtools-mcp"
+                  echo "detected: chrome-devtools-mcp in nix profile"
+                fi
               fi
 
               # ── generate config ─────────────────────────────────
               if [ -f "$config_file" ]; then
                 echo "config already exists: $config_file"
 
-                if [ "$has_cdp" = true ]; then
+                if [ -n "$cdp_cmd" ]; then
                   if ! grep -q chrome-devtools "$config_file" 2>/dev/null; then
                     echo ""
-                    echo "hint: chrome-devtools-mcp is on PATH but not in config"
+                    echo "hint: chrome-devtools-mcp available but not in config"
                     echo "  add to server.mcpServers in $config_file:"
-                    echo "    \"chrome-devtools\": { \"command\": \"chrome-devtools-mcp\", \"args\": [] }"
+                    echo "    \"chrome-devtools\": { \"command\": \"$cdp_cmd\", \"args\": [] }"
                   fi
                 fi
               else
-                if [ "$has_cdp" = true ]; then
+                if [ -n "$cdp_cmd" ]; then
                   printf '%s\n' \
                     '{' \
                     '  "server": {' \
                     '    "port": 3000,' \
                     '    "mcpServers": {' \
                     '      "chrome-devtools": {' \
-                    '        "command": "chrome-devtools-mcp",' \
+                    "        \"command\": \"$cdp_cmd\"," \
                     '        "args": []' \
                     '      }' \
                     '    }' \
