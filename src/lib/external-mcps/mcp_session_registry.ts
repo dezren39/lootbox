@@ -47,16 +47,51 @@ export interface McpSessionRegistryData {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-/** Check if a process is alive via kill(pid, 0). */
+/**
+ * H1 fix: Platform-safe process-alive check.
+ *
+ * On Unix (macOS/Linux), we read /proc/{pid} or use `kill -0` semantics.
+ * Deno doesn't expose signal 0, but on macOS /proc doesn't exist either.
+ * Strategy:
+ *   - Windows: Use Deno.Command("tasklist") to check if PID exists.
+ *   - macOS:   Use Deno.Command("kill", ["-0", pid]) which is a no-op probe.
+ *   - Linux:   Check /proc/{pid}/status existence (fast, no signals).
+ *
+ * Falls back to assuming alive if the check itself errors (safe default
+ * — stale entries will accumulate but won't be incorrectly removed).
+ */
 function isProcessAlive(pid: number): boolean {
   try {
-    Deno.kill(pid, "SIGCONT");
-    // On macOS/Linux, kill(pid, 0) would be ideal but Deno doesn't expose
-    // signal 0. SIGCONT is a no-op for running processes and throws if
-    // the process doesn't exist.
-    return true;
+    const os = Deno.build.os;
+    if (os === "linux") {
+      // /proc is always available on Linux
+      try {
+        Deno.statSync(`/proc/${pid}`);
+        return true;
+      } catch {
+        return false;
+      }
+    } else if (os === "darwin") {
+      // macOS: use kill -0 via Deno.Command (synchronous check)
+      const result = new Deno.Command("kill", {
+        args: ["-0", String(pid)],
+        stdout: "null",
+        stderr: "null",
+      }).outputSync();
+      return result.code === 0;
+    } else {
+      // Windows: use tasklist to check for the PID
+      const result = new Deno.Command("tasklist", {
+        args: ["/FI", `PID eq ${pid}`, "/NH"],
+        stdout: "piped",
+        stderr: "null",
+      }).outputSync();
+      const output = new TextDecoder().decode(result.stdout);
+      return output.includes(String(pid));
+    }
   } catch {
-    return false;
+    // If we can't determine, assume alive (safe default — avoids data loss)
+    return true;
   }
 }
 
@@ -234,9 +269,11 @@ export class McpSessionRegistry {
 
   /**
    * Generate a unique session ID for a server.
+   * M9 fix: Includes a random suffix to prevent collisions within the same ms.
    */
   static generateSessionId(serverName: string): string {
-    return `${serverName}-${Deno.pid}-${Date.now()}`;
+    const rand = Math.random().toString(36).substring(2, 8);
+    return `${serverName}-${Deno.pid}-${Date.now()}-${rand}`;
   }
 
   /** Get the path to the registry file (for testing). */

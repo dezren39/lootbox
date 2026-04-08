@@ -130,6 +130,12 @@ export class McpHealthMonitor {
       });
     }
 
+    // C2 fix: If no servers to monitor, mark running but don't start a timer.
+    if (this.serverStates.size === 0) {
+      console.error("[McpHealthMonitor] No servers to monitor — idle");
+      return;
+    }
+
     // Use the shortest check interval across all servers as the tick rate.
     // Each tick, only servers whose interval has elapsed are actually probed.
     const minInterval = Math.min(
@@ -216,16 +222,22 @@ export class McpHealthMonitor {
     }
 
     try {
-      // Use ping() with a timeout
+      // C4 fix: Use a clearable timeout to prevent timer leaks.
+      // When ping succeeds, the timeout is cleared immediately.
+      let timeoutId: number | undefined;
       const pingPromise = client.ping();
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(
+        timeoutId = setTimeout(
           () => reject(new Error("Health check timeout")),
           state.resolved.checkTimeout,
         );
       });
 
-      await Promise.race([pingPromise, timeoutPromise]);
+      try {
+        await Promise.race([pingPromise, timeoutPromise]);
+      } finally {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+      }
 
       // Success — mark healthy
       this.clientManager.updateHealthCheck(serverName);

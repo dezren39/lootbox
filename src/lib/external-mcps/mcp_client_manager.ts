@@ -164,6 +164,9 @@ export class McpClientManager {
       entry.state = "failed";
       entry.client = null;
 
+      // L5 fix: Emit "failed" event so listeners can react to initial connection failures.
+      this.emit({ type: "failed", serverName, attempts: 0 });
+
       console.error(
         `Failed to connect to MCP server '${serverName}':`,
         error instanceof Error ? error.message : String(error),

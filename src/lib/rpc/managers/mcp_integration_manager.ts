@@ -71,6 +71,8 @@ export class McpIntegrationManager {
     // ── Apply multi-client strategy & auto-port ──────────────────────
     const effectiveConfigs: Record<string, McpServerConfig> = {};
     const registeredSessionIds: string[] = [];
+    /** H4 fix: Map serverName → sessionId for targeted heartbeat updates. */
+    const serverSessionMap = new Map<string, string>();
     const portAssigner = new McpAutoPortAssigner(sessionRegistry);
 
     for (const [serverName, config] of Object.entries(mcpConfig.mcpServers)) {
@@ -119,11 +121,15 @@ export class McpIntegrationManager {
               workdir: Deno.cwd(),
             });
             registeredSessionIds.push(sessionId);
+            serverSessionMap.set(serverName, sessionId);
           } catch (err) {
             console.error(
               `[McpIntegrationManager] Auto-port failed for ${serverName}:`,
               err instanceof Error ? err.message : String(err),
             );
+            // C1 fix: Do NOT fall through to effectiveConfigs — the original
+            // port is conflicting, so skip this server entirely.
+            continue;
           }
         } else {
           // No port found in args — just register with port 0
@@ -140,6 +146,7 @@ export class McpIntegrationManager {
             workdir: Deno.cwd(),
           });
           registeredSessionIds.push(sessionId);
+          serverSessionMap.set(serverName, sessionId);
         }
       } else if (serverStrategy === "fail") {
         // Check registry for conflicts before connecting
@@ -165,6 +172,7 @@ export class McpIntegrationManager {
           workdir: Deno.cwd(),
         });
         registeredSessionIds.push(sessionId);
+        serverSessionMap.set(serverName, sessionId);
       } else if (serverStrategy === "warn") {
         // Warn if conflict exists but proceed
         const existing = await sessionRegistry.findByServerName(serverName);
@@ -188,6 +196,7 @@ export class McpIntegrationManager {
           workdir: Deno.cwd(),
         });
         registeredSessionIds.push(sessionId);
+        serverSessionMap.set(serverName, sessionId);
       } else {
         // "per-session" — each session gets its own server process (default stdio behavior)
         const sessionId = McpSessionRegistry.generateSessionId(serverName);
@@ -203,6 +212,7 @@ export class McpIntegrationManager {
           workdir: Deno.cwd(),
         });
         registeredSessionIds.push(sessionId);
+        serverSessionMap.set(serverName, sessionId);
       }
 
       effectiveConfigs[serverName] = effectiveConfig;
@@ -249,9 +259,11 @@ export class McpIntegrationManager {
         }
       }
 
-      // Update heartbeats on every healthy ping
+      // H4 fix: Update heartbeat only for the specific healthy server's session,
+      // not all sessions. This reduces disk I/O from O(N) to O(1) per ping.
       if (event.type === "server:healthy") {
-        for (const sessionId of registeredSessionIds) {
+        const sessionId = serverSessionMap.get(event.serverName);
+        if (sessionId) {
           try {
             await sessionRegistry.updateHeartbeat(sessionId);
           } catch {
@@ -261,8 +273,9 @@ export class McpIntegrationManager {
       }
     });
 
-    // Start monitoring (uses per-server health configs from the McpConfigFile)
-    healthMonitor.start(mcpConfig.mcpServers);
+    // C3 fix: Only monitor servers that passed strategy checks (effectiveConfigs),
+    // not all servers from the original config (which may include skipped ones).
+    healthMonitor.start(effectiveConfigs);
 
     this.state = {
       clientManager,
@@ -492,8 +505,10 @@ export class McpIntegrationManager {
         if (!isNaN(val) && val > 0 && val <= 65535) return val;
       }
 
-      // Bare port number
-      if (/^\d+$/.test(arg)) {
+      // M3 fix: Bare port number — only use this fallback when portArgPattern
+      // is set (i.e. the user told us to look for a port). Without a pattern,
+      // any numeric arg like "--timeout 5000" would be mis-detected as a port.
+      if (portArgPattern && /^\d+$/.test(arg)) {
         const val = parseInt(arg, 10);
         if (val > 0 && val <= 65535) return val;
       }

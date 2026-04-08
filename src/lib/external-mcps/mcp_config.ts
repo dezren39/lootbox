@@ -102,36 +102,65 @@ export function validateMcpConfig(config: unknown): McpConfigFile {
 
     const cfg = serverConfig as Record<string, unknown>;
 
-    if (typeof cfg.command !== "string") {
-      throw new Error(`Server '${serverName}' must have 'command' string`);
-    }
+    // H5 fix: Detect transport type first, then validate appropriate fields.
+    const transport = cfg.transport as string | undefined;
+    let validatedConfig: McpServerConfig;
 
-    if (!Array.isArray(cfg.args)) {
-      throw new Error(`Server '${serverName}' must have 'args' array`);
-    }
-
-    if (!cfg.args.every((arg) => typeof arg === "string")) {
-      throw new Error(
-        `Server '${serverName}' args must be array of strings`
-      );
-    }
-
-    const validatedConfig: McpServerConfig = {
-      command: cfg.command,
-      args: cfg.args as string[],
-    };
-
-    if (cfg.env !== undefined) {
-      if (typeof cfg.env !== "object" || cfg.env === null) {
-        throw new Error(`Server '${serverName}' env must be an object`);
-      }
-      const env = cfg.env as Record<string, unknown>;
-      if (!Object.values(env).every((val) => typeof val === "string")) {
+    if (transport === "streamable_http" || transport === "sse") {
+      // HTTP/SSE transport — requires url, not command/args
+      if (typeof cfg.url !== "string" || !cfg.url) {
         throw new Error(
-          `Server '${serverName}' env values must be strings`
+          `Server '${serverName}' with transport '${transport}' must have 'url' string`
         );
       }
-      validatedConfig.env = env as Record<string, string>;
+      validatedConfig = {
+        transport,
+        url: cfg.url,
+      } as McpServerConfig;
+
+      if (cfg.headers !== undefined) {
+        if (!Array.isArray(cfg.headers)) {
+          throw new Error(`Server '${serverName}' headers must be an array`);
+        }
+        (validatedConfig as unknown as Record<string, unknown>).headers = cfg.headers;
+      }
+    } else {
+      // stdio transport (default) — requires command/args
+      if (typeof cfg.command !== "string") {
+        throw new Error(`Server '${serverName}' must have 'command' string`);
+      }
+
+      if (!Array.isArray(cfg.args)) {
+        throw new Error(`Server '${serverName}' must have 'args' array`);
+      }
+
+      if (!cfg.args.every((arg) => typeof arg === "string")) {
+        throw new Error(
+          `Server '${serverName}' args must be array of strings`
+        );
+      }
+
+      validatedConfig = {
+        command: cfg.command,
+        args: cfg.args as string[],
+      } as McpServerConfig;
+
+      if (transport === "stdio") {
+        (validatedConfig as unknown as Record<string, unknown>).transport = "stdio";
+      }
+
+      if (cfg.env !== undefined) {
+        if (typeof cfg.env !== "object" || cfg.env === null) {
+          throw new Error(`Server '${serverName}' env must be an object`);
+        }
+        const env = cfg.env as Record<string, unknown>;
+        if (!Object.values(env).every((val) => typeof val === "string")) {
+          throw new Error(
+            `Server '${serverName}' env values must be strings`
+          );
+        }
+        (validatedConfig as unknown as Record<string, unknown>).env = env as Record<string, string>;
+      }
     }
 
     // Parse optional per-server health config
