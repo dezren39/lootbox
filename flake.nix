@@ -122,30 +122,18 @@
         # Single install gives you `lootbox` and `chrome-devtools-mcp`
         # on the same PATH.  lootbox can spawn the MCP server without
         # the user ever running `npm i -g` or `npx`.
+        #
+        # In lootbox.config.json, just use the binary name:
+        #   { "server": { "mcpServers": { "chrome-devtools": {
+        #       "command": "chrome-devtools-mcp",
+        #       "args": ["--headless"]
+        #   }}}}
         lootbox-full = pkgs.symlinkJoin {
           name = "lootbox-full-${version}";
           paths = [
             lootbox
             chrome-devtools-mcp
           ];
-
-          # Provide a ready-made config snippet so users can drop it
-          # into their lootbox.config.json (or use --config).
-          postBuild = ''
-            mkdir -p $out/share/lootbox
-            cat > $out/share/lootbox/mcp-config.json <<EOF
-            {
-              "server": {
-                "mcpServers": {
-                  "chrome-devtools": {
-                    "command": "$out/bin/chrome-devtools-mcp",
-                    "args": []
-                  }
-                }
-              }
-            }
-            EOF
-          '';
 
           meta = with pkgs.lib; {
             description = "lootbox CLI with vendored chrome-devtools-mcp";
