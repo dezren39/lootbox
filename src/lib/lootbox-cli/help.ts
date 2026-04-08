@@ -56,6 +56,7 @@ COMMAND-SPECIFIC HELP:
   lootbox tools --llm       Detailed tool discovery help
   lootbox scripts --llm     Detailed script management help
   lootbox workflow --llm    Detailed workflow execution help
+  lootbox health            Server health status (--json for machine-readable)
 `);
 }
 
@@ -73,6 +74,7 @@ Usage:
   lootbox scripts [subcommand]
   lootbox workflow <command> [args]
   lootbox server [OPTIONS]
+  lootbox health [--json]
 
 Execution Environment:
   \u2022 Runtime: Deno with TypeScript support
@@ -131,6 +133,11 @@ Server Commands:
     --no-sandbox              Grant full permissions to user scripts
     --allow-<perm>            Add Deno permission
     --deny-<perm>             Add Deno deny permission
+
+Health Commands:
+  health                      Pretty-print server health status
+  health --json               JSON output (for scripting)
+                              Exit codes: 0=ok, 1=degraded, 2=unhealthy, 3=unreachable
 
 Tool Discovery:
   lootbox tools                            # List all available namespaces
@@ -202,7 +209,13 @@ Example:
       "lootboxRoot": ".lootbox",
       "timeout": 30000,
       "rpcTimeout": 60000,
-      "permissions": true
+      "permissions": true,
+      "mcpServers": {
+        "filesystem": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"]
+        }
+      }
     },
     "client": {
       "clientTimeout": 35000,
@@ -218,7 +231,7 @@ Server Settings (server.*):
   lootboxRoot       Root directory for lootbox files (default: .lootbox)
                     Contains: tools/, workflows/, scripts/
   lootboxDataDir    Internal data directory (default: ~/.local/share/lootbox)
-  mcpServers        MCP server definitions (command, args, env)
+  mcpServers        MCP server definitions (see MCP Config below)
   timeout           Script execution timeout in ms (default: 10000)
                     CLI: --timeout <ms>
   rpcTimeout        RPC function call timeout in ms (default: 30000)
@@ -238,6 +251,30 @@ Client Settings (client.*):
 Global Settings (global.*):
   port              Default port used by both server and client
 
+MCP Server Config (server.mcpServers.{name}.*):
+  Each MCP server supports these fields:
+
+  Stdio transport (default):
+    command           Command to launch the server (required)
+    args              Array of command-line arguments
+    env               Environment variables (key-value object)
+
+  HTTP/SSE transport:
+    transport         "streamable_http" or "sse"
+    url               Server URL (required for HTTP/SSE)
+
+  Per-server health monitoring (health.*):
+    checkInterval         Health check interval in ms (default: 30000)
+    maxReconnectAttempts  Max reconnect attempts, 0=unlimited (default: 5)
+    reconnectBackoffBase  Backoff base in ms (default: 2000)
+    maxReconnectBackoff   Max backoff cap in ms (default: 60000)
+    checkTimeout          Single probe timeout in ms (default: 5000)
+
+  Multi-client conflict resolution (multiClient.*):
+    strategy          "warn" | "fail" | "auto-port" | "per-session" (default: "warn")
+    portRange         [start, end] port range for auto-port (default: [9222, 9299])
+    portArgPattern    CLI flag pattern for port rewriting (e.g., "--browserUrl")
+
 Permissions:
   Controls Deno permissions for user-script execution.
 
@@ -254,6 +291,24 @@ Permissions:
 
   CLI flags --allow-* and --deny-* append to config permissions.
   --no-sandbox overrides everything with --allow-all.
+
+Hazmat Overrides (hazmat.server.*):
+  Advanced settings for MCP health monitoring defaults:
+    mcpHealthCheckInterval      Global health check interval (default: 30000)
+    mcpMaxReconnectAttempts     Global max reconnect attempts (default: 5)
+    mcpReconnectBackoffBase     Global backoff base (default: 2000)
+    mcpMaxReconnectBackoff      Global max backoff cap (default: 60000)
+    mcpHealthCheckTimeout       Global probe timeout (default: 5000)
+    mcpDefaultMultiClientStrategy  Default strategy (default: "warn")
+
+  Other hazmat overrides:
+    workerReadyTimeout, workerShutdownGrace, fileWatchDebounce,
+    maxWorkerBackoff, maxWorkerRestarts, workerBackoffBase
+
+Health Command:
+  lootbox health              Pretty-print server health
+  lootbox health --json       JSON output for scripting
+  Exit codes: 0=ok, 1=degraded, 2=unhealthy, 3=unreachable
 
 Priority (for all settings):
   CLI flags > config file > defaults

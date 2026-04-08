@@ -132,7 +132,13 @@ export class WebSocketRpcServer {
     // Phase 1 & 2: Load RPC cache and initialize MCP in parallel
     await Promise.all([
       this.rpcCacheManager.refreshCache(),
-      mcpConfig ? this.mcpIntegrationManager.initialize(mcpConfig, config.mcp_client_name) : Promise.resolve(),
+      mcpConfig ? this.mcpIntegrationManager.initialize(mcpConfig, config.mcp_client_name, {
+        checkInterval: config.mcp_health_check_interval,
+        maxReconnectAttempts: config.mcp_max_reconnect_attempts,
+        reconnectBackoffBase: config.mcp_reconnect_backoff_base,
+        maxReconnectBackoff: config.mcp_max_reconnect_backoff,
+        checkTimeout: config.mcp_health_check_timeout,
+      }, port, config.mcp_default_multi_client_strategy) : Promise.resolve(),
     ]);
 
     // Phase 2.5: Generate initial client code
@@ -180,7 +186,8 @@ export class WebSocketRpcServer {
     }, config.file_watch_debounce, config.tool_file_extension);
 
     // Phase 8: Start HTTP server
-    Deno.serve({ port, onListen: () => {} }, this.app.fetch);
+    // TODO: make hostname configurable (e.g. config.hostname ?? "localhost")
+    Deno.serve({ port, hostname: "localhost", onListen: () => {} }, this.app.fetch);
 
     // Give server time to start
     await new Promise((resolve) => setTimeout(resolve, config.server_start_delay));
@@ -243,7 +250,8 @@ export class WebSocketRpcServer {
       get_client,
       this.currentPort,
       this.healthPath,
-      this.openApiTitle
+      this.openApiTitle,
+      this.workerManager
     );
     openApiHandler.setupRoutes();
 

@@ -79,8 +79,8 @@ export const DEFAULT_PERMISSION_FLAGS: readonly string[] = ["--allow-net"];
 
 // ── Path / route defaults ────────────────────────────────────────────
 /**
- * Config file name searched for in the current working directory
- * when no --config flag is supplied.
+ * Legacy config file name in the current working directory.
+ * First candidate in the config search chain (see get_config.ts discoverConfigFile).
  */
 export const DEFAULT_CONFIG_FILENAME = "lootbox.config.json";
 
@@ -107,4 +107,38 @@ export const DEFAULT_WORKFLOW_STATE_FILE = ".lootbox-workflow.json";
 
 /** Identity string sent as MCP client name. */
 export const DEFAULT_MCP_CLIENT_NAME = "lootbox";
+
+// ── MCP health monitoring defaults ──────────────────────────────────
+/** Interval in ms between MCP server health checks. */
+export const DEFAULT_MCP_HEALTH_CHECK_INTERVAL_MS = 30_000;
+
+/** Circuit breaker: max MCP reconnection attempts (0 = unlimited). */
+export const DEFAULT_MCP_MAX_RECONNECT_ATTEMPTS = 5;
+
+/** Base value in ms for exponential MCP reconnection backoff. */
+export const DEFAULT_MCP_RECONNECT_BACKOFF_BASE_MS = 2_000;
+
+/** Maximum backoff cap in ms for MCP reconnection attempts. */
+export const DEFAULT_MCP_MAX_RECONNECT_BACKOFF_MS = 60_000;
+
+/** Timeout in ms for a single MCP health-check probe. */
+export const DEFAULT_MCP_HEALTH_CHECK_TIMEOUT_MS = 5_000;
+
+// ── MCP multi-client defaults ───────────────────────────────────────
+/**
+ * Default strategy when multiple lootbox instances configure the same
+ * MCP server. "warn" logs a warning but proceeds; "fail" refuses to
+ * connect; "auto-port" auto-increments the port; "per-session" spawns
+ * an independent server process per session.
+ */
+export const DEFAULT_MCP_MULTI_CLIENT_STRATEGY = "warn" as const;
+
+/**
+ * Default port range for auto-port assignment.
+ * Only used when multiClient.strategy is "auto-port".
+ */
+export const DEFAULT_MCP_AUTO_PORT_RANGE: readonly [number, number] = [9222, 9299];
+
+/** Directory name (relative to data dir) for MCP session registry files. */
+export const DEFAULT_MCP_SESSIONS_DIR = "mcp-sessions";
 

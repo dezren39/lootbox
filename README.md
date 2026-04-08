@@ -242,27 +242,64 @@ const raw = stdin().raw();
 
 ## Configuration
 
-Create `lootbox.config.json` in your project directory:
+Create `lootbox.config.json` in your project directory. The config uses a
+structured format with `server`, `client`, `global`, and `hazmat` sections:
 
 ```json
 {
-  "port": 3000,
-  "serverUrl": "ws://localhost:3000/ws",
-  "lootboxRoot": ".lootbox",
-  "lootboxDataDir": "./data",
-  "mcpServers": {
-    // WIP
+  "server": {
+    "port": 3000,
+    "lootboxRoot": ".lootbox",
+    "timeout": 30000,
+    "rpcTimeout": 60000,
+    "permissions": true,
+    "mcpServers": {
+      "filesystem": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"]
+      }
+    }
+  },
+  "client": {
+    "clientTimeout": 35000,
+    "clientTimeoutBuffer": 5000
   }
 }
 ```
 
-**Configuration Options:**
+See [docs/examples/](docs/examples/) for complete example configs.
 
-- `port` - Server port (default: 3000)
-- `serverUrl` - Override WebSocket URL for custom host/protocol (optional, derived from port if not specified)
-- `lootboxRoot` - Directory containing tools/, workflows/, scripts/ subdirectories (default: `.lootbox`)
-- `lootboxDataDir` - Directory for runtime data storage (optional, defaults to `~/.local/share/lootbox` on Linux/Mac, `%LOCALAPPDATA%\lootbox` on Windows)
-- `mcpServers` - External MCP server configurations (optional)
+**Server Settings (`server.*`):**
+
+| Setting        | Default     | CLI Flag               | Description                           |
+|----------------|-------------|------------------------|---------------------------------------|
+| `port`         | `3000`      | `--port`, `-p`         | TCP port for WebSocket RPC server     |
+| `lootboxRoot`  | `.lootbox`  | `--lootbox-root`, `-r` | Root dir for tools/workflows/scripts  |
+| `lootboxDataDir`| (platform) | `--lootbox-data-dir`   | Runtime data storage                  |
+| `timeout`      | `10000`     | `--timeout`            | Script execution timeout (ms)         |
+| `rpcTimeout`   | `30000`     | `--rpc-timeout`        | RPC function call timeout (ms)        |
+| `permissions`  | `true`      | `--no-sandbox`         | Deno permission flags (see below)     |
+| `mcpServers`   | `null`      | -                      | External MCP server definitions       |
+
+**Client Settings (`client.*`):**
+
+| Setting               | Default                      | CLI Flag                  | Description                    |
+|-----------------------|------------------------------|---------------------------|--------------------------------|
+| `serverUrl`           | `ws://localhost:{port}/ws`   | `--server-url`, `-s`      | WebSocket URL                  |
+| `clientTimeout`       | `max(timeout+buffer, 30000)` | `--client-timeout`        | Client response timeout (ms)   |
+| `clientTimeoutBuffer` | `5000`                       | `--client-timeout-buffer` | Buffer added to server timeout |
+
+**Permissions:**
+
+Controls Deno permissions for user-script execution:
+- `true` - Apply defaults (`--allow-net` only)
+- `false` / `null` - Fully sandboxed
+- `"all"` - Grant `--allow-all`
+- `{ "defaults": true, "allow": ["read=/tmp"], "deny": ["write"] }` - Object form
+- CLI: `--allow-<perm>`, `--deny-<perm>`, `--no-sandbox`
+
+**Priority:** CLI flags > config file > defaults. Run `lootbox --config-help`
+for the full priority chain and advanced `hazmat.*` overrides.
 
 **Directory Resolution** (priority order):
 
@@ -270,13 +307,6 @@ Create `lootbox.config.json` in your project directory:
 2. `lootboxRoot` from config file
 3. Local `.lootbox/` directory (if exists)
 4. Global `~/.lootbox/` directory
-
-**CLI Flags:**
-
-- `--port <number>` - Custom server port
-- `--lootbox-root <path>` - Custom tools directory
-- `--lootbox-data-dir <path>` - Custom data directory
-- `--server <url>` - Custom server URL for execution
 
 ## CLI Command Reference
 
@@ -297,13 +327,20 @@ Create `lootbox.config.json` in your project directory:
 
 - `lootbox server` - Start server (default port 3000)
 - `lootbox server --port <port> --lootbox-root <dir> --lootbox-data-dir <dir>` - Start with custom settings
+- `lootbox server --timeout <ms> --rpc-timeout <ms>` - Custom timeouts
 - `lootbox init` - Create `.lootbox/` directory structure
+
+### Health
+
+- `lootbox health` - Pretty-print server health status
+- `lootbox health --json` - JSON output (for scripting)
+  - Exit codes: 0=ok, 1=degraded, 2=unhealthy, 3=unreachable
 
 ### Help
 
 - `lootbox --help` - Human-friendly help
 - `lootbox --llm-help` - LLM-focused command reference
-- `lootbox --config-help` - Configuration documentation
+- `lootbox --config-help` - Configuration documentation (includes MCP health/multi-client)
 - `lootbox --version` - Show version number
 
 ## MCP Server Integration
@@ -312,17 +349,85 @@ Integrate external MCP servers alongside local tools. MCP tools are namespaced w
 
 ### Configuration
 
+MCP servers can be configured in `lootbox.config.json` or a standalone `.mcp.json`:
+
 ```json
 {
   "mcpServers": {
-    // WIP may not work properly with all mcp servers
     "filesystem": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_TOKEN": "ghp_xxx" },
+      "health": {
+        "checkInterval": 15000,
+        "maxReconnectAttempts": 10
+      }
+    },
+    "remote-api": {
+      "transport": "streamable_http",
+      "url": "https://mcp.example.com/api"
     }
   }
 }
 ```
+
+**Transport types:**
+- **stdio** (default) - Launch as child process
+- **streamable_http** - Connect via HTTP
+- **sse** - Connect via Server-Sent Events
+
+### Health Monitoring
+
+Lootbox automatically monitors MCP server health with periodic `ping()`
+probes. If a server becomes unreachable, it reconnects with exponential
+backoff. A circuit breaker stops retries after a configurable number of
+failures.
+
+Per-server health config (all fields optional):
+
+```json
+{
+  "health": {
+    "checkInterval": 15000,
+    "maxReconnectAttempts": 10,
+    "reconnectBackoffBase": 1000,
+    "maxReconnectBackoff": 30000,
+    "checkTimeout": 3000
+  }
+}
+```
+
+See [docs/examples/HEALTH_MONITORING.md](docs/examples/HEALTH_MONITORING.md)
+for the full guide.
+
+### Multi-Client Strategies
+
+When multiple lootbox instances use the same MCP server, the `multiClient`
+config controls conflict resolution:
+
+| Strategy      | Description                                         |
+|---------------|-----------------------------------------------------|
+| `warn`        | Log warning, proceed anyway (default)               |
+| `fail`        | Refuse to connect if already in use                 |
+| `auto-port`   | Auto-assign next free port from a range             |
+| `per-session`  | Spawn independent server per session                |
+
+```json
+{
+  "multiClient": {
+    "strategy": "auto-port",
+    "portRange": [9222, 9299],
+    "portArgPattern": "--remote-debugging-port"
+  }
+}
+```
+
+See [docs/examples/MULTI_CLIENT.md](docs/examples/MULTI_CLIENT.md)
+for the full guide.
 
 ### Usage
 
@@ -521,7 +626,7 @@ See the "Example Tools" section above for reference implementations (kv, sqlite,
 
 | Endpoint             | Method | Description                                       |
 | -------------------- | ------ | ------------------------------------------------- |
-| `/health`            | GET    | Server health check                               |
+| `/health`            | GET    | Deep health check (workers + MCP subsystems)      |
 | `/namespaces`        | GET    | List available tool namespaces and MCP servers    |
 | `/types`             | GET    | All TypeScript type definitions for all tools     |
 | `/types/:namespaces` | GET    | Types for specific namespaces (comma-separated)   |
@@ -529,6 +634,32 @@ See the "Example Tools" section above for reference implementations (kv, sqlite,
 | `/ui`                | GET    | Interactive status dashboard (HTML)               |
 | `/doc`               | GET    | OpenAPI/Swagger documentation (HTML)              |
 | `/ws`                | WS     | WebSocket endpoint for script execution           |
+
+### Health Endpoint
+
+The `/health` endpoint returns structured status for all subsystems:
+
+```bash
+curl http://localhost:3000/health
+```
+
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-04-07T12:00:00.000Z",
+  "subsystems": {
+    "workers": { "status": "ok", "total": 1, "ready": 1 },
+    "mcp": {
+      "status": "ok",
+      "servers": {
+        "filesystem": { "status": "connected", "reconnectAttempts": 0 }
+      }
+    }
+  }
+}
+```
+
+Overall status: `ok` | `degraded` | `unhealthy` (worst of all subsystems).
 
 ### Examples
 
@@ -609,16 +740,17 @@ deno task start:prod
 │             │          │                 │          │                 │
 │ • Web UI    │◄────────►│ • Auto-discover │◄────────►│ • .lootbox/tools│
 │ • CLI       │    WS    │ • Type gen      │   Load   │ • MCP Servers   │
-│ • LLM/MCP   │   HTTP   │ • Sandboxing    │          │                 │
-└─────────────┘          └─────────────────┘          └─────────────────┘
+│ • LLM/MCP   │   HTTP   │ • Permissions   │          │                 │
+└─────────────┘          │ • Health monitor│          └─────────────────┘
+                         └─────────────────┘
 ```
 
 **Key Features:**
 
 - WebSocket RPC server with auto-discovery
-- Sandboxed script execution with timeout
+- Sandboxed script execution with configurable timeout and permissions
 - Full TypeScript type safety
-- MCP server integration
+- MCP server integration with health monitoring, auto-reconnection, and multi-client support
 
 ## Technical Details
 
@@ -629,8 +761,8 @@ deno task start:prod
 ### Script Sandboxing
 
 - **Isolated Execution**: User scripts run in separate Deno processes
-- **Limited Permissions**: Scripts only have `--allow-net` access
-- **10-Second Timeout**: Automatic termination for long-running scripts
+- **Configurable Permissions**: Default `--allow-net` only; override via config or `--no-sandbox`
+- **Configurable Timeout**: Default 10 seconds (override via `--timeout <ms>`)
 - **Injected Client**: `tools` object automatically available
 
 ### Type System
@@ -645,9 +777,9 @@ deno task start:prod
 **Local-First Design**: Lootbox runs on your local machine in trusted environments.
 
 - **Tool Functions**: Run with `--allow-all` - only include trusted code
-- **User Scripts**: Sandboxed with `--allow-net` only
+- **User Scripts**: Sandboxed with configurable permissions (default: `--allow-net` only)
 - **No Authentication**: Designed for localhost use
-- **MCP Servers**: External processes with configurable permissions
+- **MCP Servers**: External processes with health monitoring and auto-reconnection
 
 ## Inspiration
 

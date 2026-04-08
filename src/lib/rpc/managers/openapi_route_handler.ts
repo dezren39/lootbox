@@ -27,8 +27,12 @@ import {
 import type { McpIntegrationManager } from "./mcp_integration_manager.ts";
 import type { RpcCacheManager } from "./rpc_cache_manager.ts";
 import type { TypeGeneratorManager } from "./type_generator_manager.ts";
+import type { WorkerManager } from "../worker_manager.ts";
 import { VERSION } from "../../../version.ts";
 import { DEFAULT_HEALTH_PATH, DEFAULT_OPENAPI_TITLE } from "../../constants.ts";
+
+/** Timestamp captured at module load — used to compute uptime. */
+const serverStartTime = Date.now();
 
 export class OpenApiRouteHandler {
   constructor(
@@ -39,7 +43,8 @@ export class OpenApiRouteHandler {
     private clientCacheGetter: () => { code: string },
     private port: number,
     private healthPath: string = DEFAULT_HEALTH_PATH,
-    private openApiTitle: string = DEFAULT_OPENAPI_TITLE
+    private openApiTitle: string = DEFAULT_OPENAPI_TITLE,
+    private workerManager: WorkerManager | null = null
   ) {}
 
   setupRoutes(): void {
@@ -72,8 +77,50 @@ export class OpenApiRouteHandler {
         },
       }),
       (c) => {
+        // Worker health
+        const workerHealth = this.workerManager?.getHealthStatus() ?? {
+          status: "ok" as const,
+          total: 0,
+          ready: 0,
+          failed: 0,
+          crashed: 0,
+          starting: 0,
+        };
+
+        // MCP health
+        const mcpHealth = this.mcpIntegrationManager.getHealthStatus();
+
+        // Map MCP server health to the response shape
+        const servers: Record<string, { status: "connected" | "disconnected" | "reconnecting" | "failed"; last_health_check: string | null; reconnect_attempts: number }> = {};
+        for (const [name, health] of Object.entries(mcpHealth.servers)) {
+          servers[name] = {
+            status: health.status,
+            last_health_check: health.lastHealthCheck,
+            reconnect_attempts: health.reconnectAttempts,
+          };
+        }
+
+        // Overall status: worst of workers + MCP
+        const statuses = [workerHealth.status, mcpHealth.status];
+        let overall: "ok" | "degraded" | "unhealthy";
+        if (statuses.includes("unhealthy")) {
+          overall = "unhealthy";
+        } else if (statuses.includes("degraded")) {
+          overall = "degraded";
+        } else {
+          overall = "ok";
+        }
+
         return c.json({
-          status: "ok",
+          status: overall,
+          uptime_ms: Date.now() - serverStartTime,
+          subsystems: {
+            workers: workerHealth,
+            mcp_servers: {
+              status: mcpHealth.status,
+              servers,
+            },
+          },
         });
       }
     );

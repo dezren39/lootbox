@@ -25,6 +25,11 @@ script-history/
 lootbox
 lootbox.exe
 lootbox.config.json
-docs/
+docs/plans/
+!docs/examples/
 .opencode/
 result
+docs/plans
+.opencode
+plans/
+thoughts/
