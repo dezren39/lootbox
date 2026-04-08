@@ -306,6 +306,8 @@
               done
 
               # ── generate config ─────────────────────────────────
+              # Only MCP servers need to be in the global config — port
+              # defaults to 3000 and doesn't need to be specified.
               if [ -f "$config_file" ]; then
                 echo ""
                 echo "config already exists: $config_file"
@@ -322,12 +324,12 @@
                   done
                 fi
               else
-                # Build JSON with proper formatting
+                # Build JSON — only include what differs from defaults.
+                # lootbox defaults: port 3000, no MCP servers.
                 if [ "$n_servers" -gt 0 ]; then
                   {
                     echo '{'
                     echo '  "server": {'
-                    echo '    "port": 3000,'
                     echo '    "mcpServers": {'
                     for (( i=0; i<n_servers; i++ )); do
                       comma=","
@@ -342,13 +344,7 @@
                     echo '}'
                   } > "$config_file"
                 else
-                  {
-                    echo '{'
-                    echo '  "server": {'
-                    echo '    "port": 3000'
-                    echo '  }'
-                    echo '}'
-                  } > "$config_file"
+                  echo '{}' > "$config_file"
                 fi
 
                 echo "wrote $config_file"
