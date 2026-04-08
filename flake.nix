@@ -118,16 +118,6 @@
         };
 
         # ── lootbox-full: lootbox + vendored chrome-devtools-mcp ────
-        #
-        # Single install gives you `lootbox` and `chrome-devtools-mcp`
-        # on the same PATH.  lootbox can spawn the MCP server without
-        # the user ever running `npm i -g` or `npx`.
-        #
-        # In lootbox.config.json, just use the binary name:
-        #   { "server": { "mcpServers": { "chrome-devtools": {
-        #       "command": "chrome-devtools-mcp",
-        #       "args": ["--headless"]
-        #   }}}}
         lootbox-full = pkgs.symlinkJoin {
           name = "lootbox-full-${version}";
           paths = [
@@ -178,17 +168,82 @@
           );
         };
 
-        # Install the pre-built binary: nix run .#install -- [dest]
-        # Copies to $1 if given, otherwise $PWD/lootbox
-        apps.install = {
+        # Create global ~/.lootbox dirs and default config if missing.
+        # Auto-detects chrome-devtools-mcp on PATH and wires it into
+        # the mcpServers config when found.
+        apps.setup = {
           type = "app";
           program = toString (
-            pkgs.writeShellScript "lootbox-install" ''
+            pkgs.writeShellScript "lootbox-setup" ''
               set -euo pipefail
-              dest="''${1:-./lootbox}"
-              cp -f "${lootbox}/bin/.lootbox-unwrapped" "$dest"
-              chmod +x "$dest"
-              echo "installed lootbox → $dest"
+
+              global_dir="$HOME/.lootbox"
+              config_file="$global_dir/config.json"
+
+              echo "lootbox setup"
+              echo ""
+
+              # ── create global dirs ──────────────────────────────
+              created=""
+              for dir in tools workflows scripts; do
+                if [ ! -d "$global_dir/$dir" ]; then
+                  mkdir -p "$global_dir/$dir"
+                  created="''${created:+$created, }$dir"
+                fi
+              done
+
+              if [ -n "$created" ]; then
+                echo "created ~/.lootbox/{$created}"
+              else
+                echo "~/.lootbox/ dirs already exist"
+              fi
+
+              # ── detect chrome-devtools-mcp ───────────────────────
+              has_cdp=false
+              if command -v chrome-devtools-mcp >/dev/null 2>&1; then
+                has_cdp=true
+                echo "detected: chrome-devtools-mcp on PATH"
+              fi
+
+              # ── generate config ─────────────────────────────────
+              if [ -f "$config_file" ]; then
+                echo "config already exists: $config_file"
+
+                if [ "$has_cdp" = true ]; then
+                  if ! grep -q chrome-devtools "$config_file" 2>/dev/null; then
+                    echo ""
+                    echo "hint: chrome-devtools-mcp is on PATH but not in config"
+                    echo "  add to server.mcpServers in $config_file:"
+                    echo "    \"chrome-devtools\": { \"command\": \"chrome-devtools-mcp\", \"args\": [] }"
+                  fi
+                fi
+              else
+                if [ "$has_cdp" = true ]; then
+                  printf '%s\n' \
+                    '{' \
+                    '  "server": {' \
+                    '    "port": 3000,' \
+                    '    "mcpServers": {' \
+                    '      "chrome-devtools": {' \
+                    '        "command": "chrome-devtools-mcp",' \
+                    '        "args": []' \
+                    '      }' \
+                    '    }' \
+                    '  }' \
+                    '}' > "$config_file"
+                else
+                  printf '%s\n' \
+                    '{' \
+                    '  "server": {' \
+                    '    "port": 3000' \
+                    '  }' \
+                    '}' > "$config_file"
+                fi
+                echo "wrote $config_file"
+              fi
+
+              echo ""
+              echo "done. start with: lootbox server --config $config_file"
             ''
           );
         };
