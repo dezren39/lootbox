@@ -288,12 +288,24 @@ const _resolve_config = async (): Promise<ResolvedConfig> => {
     workflowsDir = `${lootboxRoot}/workflows`;
     scriptsDir = `${lootboxRoot}/scripts`;
   } else {
-    const localToolsDir = ".lootbox/tools";
-    if (await exists(localToolsDir)) {
-      lootboxRoot = ".lootbox";
-      toolsDir = localToolsDir;
+    const localLootboxDir = ".lootbox";
+    if (await exists(localLootboxDir)) {
+      lootboxRoot = localLootboxDir;
+      toolsDir = `${lootboxRoot}/tools`;
       workflowsDir = `${lootboxRoot}/workflows`;
       scriptsDir = `${lootboxRoot}/scripts`;
+
+      // Auto-create missing subdirectories so the server doesn't crash
+      for (const dir of [toolsDir, workflowsDir, scriptsDir]) {
+        if (!(await exists(dir))) {
+          try {
+            await Deno.mkdir(dir, { recursive: true });
+            console.error(`Auto-created missing directory: ${dir}`);
+          } catch {
+            // Best effort — will fail later if actually needed
+          }
+        }
+      }
     } else {
       const homeToolsDir = getUserLootboxToolsDir();
       if (await exists(homeToolsDir)) {
@@ -304,7 +316,7 @@ const _resolve_config = async (): Promise<ResolvedConfig> => {
       } else {
         console.error("\n\u274C No lootbox directory found!");
         console.error("\nLooked in:");
-        console.error(`  \u2022 ${localToolsDir}`);
+        console.error(`  \u2022 ${localLootboxDir}`);
         console.error(`  \u2022 ${homeToolsDir}`);
         console.error(
           "\n\uD83D\uDCA1 Run 'lootbox init' to create a new lootbox project.\n",

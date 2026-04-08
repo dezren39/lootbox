@@ -31,6 +31,25 @@ export class FileWatcherManager {
     }
 
     try {
+      // Ensure the directory exists before trying to watch it.
+      // If it was just auto-created (or doesn't exist for some reason),
+      // Deno.watchFs would throw without this guard.
+      try {
+        const info = Deno.statSync(directory);
+        if (!info.isDirectory) {
+          console.error(`File watcher: ${directory} is not a directory, skipping`);
+          return;
+        }
+      } catch {
+        try {
+          Deno.mkdirSync(directory, { recursive: true });
+          console.error(`File watcher: created missing directory ${directory}`);
+        } catch (mkdirErr) {
+          console.error(`File watcher: cannot create ${directory}:`, mkdirErr);
+          return;
+        }
+      }
+
       this.watcher = Deno.watchFs(directory);
       this.watching = true;
 
@@ -68,9 +87,14 @@ export class FileWatcherManager {
 
     this.watching = false;
 
-    // Note: Deno.FsWatcher doesn't have a direct close method,
-    // but setting watcher to null will allow garbage collection
-    this.watcher = null;
+    if (this.watcher) {
+      try {
+        this.watcher.close();
+      } catch {
+        // Best effort — may already be closed
+      }
+      this.watcher = null;
+    }
   }
 
   /**

@@ -1,54 +1,79 @@
 import { DEFAULT_PORT } from "../constants.ts";
 
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await Deno.stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function init(): Promise<void> {
   const lootboxDir = ".lootbox";
   const configFile = "lootbox.config.json";
+  const subdirs = ["tools", "workflows", "scripts"] as const;
 
-  // Check for existing files/directories
-  const conflicts: string[] = [];
+  const lootboxExists = await pathExists(lootboxDir);
+  const configExists = await pathExists(configFile);
 
-  try {
-    await Deno.stat(lootboxDir);
-    conflicts.push(lootboxDir);
-  } catch {
-    // Doesn't exist, good
+  // If both already exist and all subdirs are present, nothing to do
+  if (lootboxExists && configExists) {
+    const missingSubdirs = [];
+    for (const sub of subdirs) {
+      if (!(await pathExists(`${lootboxDir}/${sub}`))) {
+        missingSubdirs.push(sub);
+      }
+    }
+
+    if (missingSubdirs.length === 0) {
+      console.error("Already initialized — .lootbox/ and lootbox.config.json both exist.");
+      console.error("All subdirectories present (tools/, workflows/, scripts/).");
+      Deno.exit(1);
+    }
+
+    // Repair: create only the missing subdirectories
+    for (const sub of missingSubdirs) {
+      await Deno.mkdir(`${lootboxDir}/${sub}`, { recursive: true });
+      console.log(`✓ Created .lootbox/${sub}/ (was missing)`);
+    }
+    console.log("\nRepaired! Start server: lootbox server");
+    return;
   }
 
-  try {
-    await Deno.stat(configFile);
-    conflicts.push(configFile);
-  } catch {
-    // Doesn't exist, good
+  // If .lootbox exists but config doesn't, create missing subdirs + config
+  if (lootboxExists) {
+    for (const sub of subdirs) {
+      if (!(await pathExists(`${lootboxDir}/${sub}`))) {
+        await Deno.mkdir(`${lootboxDir}/${sub}`, { recursive: true });
+        console.log(`✓ Created .lootbox/${sub}/ (was missing)`);
+      }
+    }
+  } else {
+    // Create full directory structure
+    for (const sub of subdirs) {
+      await Deno.mkdir(`${lootboxDir}/${sub}`, { recursive: true });
+    }
+    console.log("✓ Created .lootbox/");
+    console.log("✓ Created .lootbox/tools/");
+    console.log("✓ Created .lootbox/workflows/");
+    console.log("✓ Created .lootbox/scripts/");
   }
 
-  if (conflicts.length > 0) {
-    console.error("Error: The following files/directories already exist:");
-    conflicts.forEach((c) => console.error(`  - ${c}`));
-    console.error("\nPlease remove them or run init in a different directory.");
-    Deno.exit(1);
+  if (!configExists) {
+    const defaultConfig = {
+      server: {
+        port: DEFAULT_PORT,
+        lootboxRoot: ".lootbox",
+      },
+    };
+
+    await Deno.writeTextFile(
+      configFile,
+      JSON.stringify(defaultConfig, null, 2) + "\n",
+    );
+    console.log("✓ Created lootbox.config.json");
   }
 
-  // Create directory structure
-  await Deno.mkdir(`${lootboxDir}/tools`, { recursive: true });
-  await Deno.mkdir(`${lootboxDir}/workflows`, { recursive: true });
-  await Deno.mkdir(`${lootboxDir}/scripts`, { recursive: true });
-
-  // Create config file with defaults
-  const defaultConfig = {
-    port: DEFAULT_PORT,
-    lootboxRoot: ".lootbox",
-  };
-
-  await Deno.writeTextFile(
-    configFile,
-    JSON.stringify(defaultConfig, null, 2) + "\n"
-  );
-
-  // Success message
-  console.log("✓ Created .lootbox/");
-  console.log("✓ Created .lootbox/tools/");
-  console.log("✓ Created .lootbox/workflows/");
-  console.log("✓ Created .lootbox/scripts/");
-  console.log("✓ Created lootbox.config.json");
   console.log("\nReady! Start server: lootbox server");
 }
