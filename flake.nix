@@ -306,8 +306,8 @@
               done
 
               # ── generate config ─────────────────────────────────
-              # Only MCP servers need to be in the global config — port
-              # defaults to 3000 and doesn't need to be specified.
+              # Only write a config file when there are MCP servers to
+              # register — everything else uses lootbox built-in defaults.
               if [ -f "$config_file" ]; then
                 echo ""
                 echo "config already exists: $config_file"
@@ -323,35 +323,32 @@
                     fi
                   done
                 fi
-              else
-                # Build JSON — only include what differs from defaults.
-                # lootbox defaults: port 3000, no MCP servers.
-                if [ "$n_servers" -gt 0 ]; then
-                  {
-                    echo '{'
-                    echo '  "server": {'
-                    echo '    "mcpServers": {'
-                    for (( i=0; i<n_servers; i++ )); do
-                      comma=","
-                      [ $((i + 1)) -eq "$n_servers" ] && comma=""
-                      echo "      \"''${mcp_names[$i]}\": {"
-                      echo "        \"command\": \"''${mcp_cmds[$i]}\","
-                      echo '        "args": []'
-                      echo "      }$comma"
-                    done
-                    echo '    }'
-                    echo '  }'
-                    echo '}'
-                  } > "$config_file"
-                else
-                  echo '{}' > "$config_file"
-                fi
-
+              elif [ "$n_servers" -gt 0 ]; then
+                {
+                  echo '{'
+                  echo '  "server": {'
+                  echo '    "mcpServers": {'
+                  for (( i=0; i<n_servers; i++ )); do
+                    comma=","
+                    [ $((i + 1)) -eq "$n_servers" ] && comma=""
+                    echo "      \"''${mcp_names[$i]}\": {"
+                    echo "        \"command\": \"''${mcp_cmds[$i]}\","
+                    echo '        "args": []'
+                    echo "      }$comma"
+                  done
+                  echo '    }'
+                  echo '  }'
+                  echo '}'
+                } > "$config_file"
                 echo "wrote $config_file"
               fi
 
               echo ""
-              echo "done. start with: lootbox server --config $config_file"
+              if [ -f "$config_file" ]; then
+                echo "done. start with: lootbox server --config $config_file"
+              else
+                echo "done. start with: lootbox server"
+              fi
             ''
           );
         };
