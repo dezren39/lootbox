@@ -171,15 +171,74 @@
         };
 
         # Create global ~/.lootbox dirs and default config if missing.
-        # Detects chrome-devtools-mcp via:
-        #   1. command -v (user PATH — lootbox-full, npm, manual install)
-        #   2. nix-store -qR ~/.nix-profile (separate nix profile install)
-        # If found only via Nix store, uses the absolute store path in config.
+        # Flags:
+        #   --no-autodetect     skip MCP binary detection entirely
+        #   --include <bin>     force-add a binary as an MCP server
+        #   --exclude <bin>     skip this binary even if autodetected
         apps.setup = {
           type = "app";
           program = toString (
             pkgs.writeShellScript "lootbox-setup" ''
               set -euo pipefail
+
+              # ── parse flags ─────────────────────────────────────
+              autodetect=true
+              includes=()
+              excludes=()
+
+              while [ $# -gt 0 ]; do
+                case "$1" in
+                  --no-autodetect) autodetect=false; shift ;;
+                  --include)
+                    [ $# -lt 2 ] && { echo "error: --include requires an argument"; exit 1; }
+                    includes+=("$2"); shift 2 ;;
+                  --exclude)
+                    [ $# -lt 2 ] && { echo "error: --exclude requires an argument"; exit 1; }
+                    excludes+=("$2"); shift 2 ;;
+                  -h|--help)
+                    echo "Usage: lootbox-setup [FLAGS]"
+                    echo ""
+                    echo "Creates ~/.lootbox/ dirs and a default config.json."
+                    echo ""
+                    echo "Flags:"
+                    echo "  --no-autodetect   skip MCP binary detection"
+                    echo "  --include <bin>   force-add a binary as MCP server"
+                    echo "  --exclude <bin>   skip a binary even if autodetected"
+                    echo "  -h, --help        show this help"
+                    exit 0 ;;
+                  *) echo "unknown flag: $1 (try --help)"; exit 1 ;;
+                esac
+              done
+
+              # ── detect an MCP binary on PATH ──────────────────────
+              # Uses only `command -v` — bare binary names survive Nix
+              # profile upgrades and garbage collection.  If the binary
+              # is installed but not on PATH, the user must fix that.
+              detect_mcp_binary() {
+                local bin="$1"
+                if command -v "$bin" >/dev/null 2>&1; then
+                  echo "$bin"
+                  return 0
+                fi
+                return 1
+              }
+
+              # ── check if a binary is excluded ─────────────────────
+              is_excluded() {
+                local bin="$1"
+                local ex
+                for ex in "''${excludes[@]+"''${excludes[@]}"}"; do
+                  [ "$ex" = "$bin" ] && return 0
+                done
+                return 1
+              }
+
+              # ── config key from binary name ───────────────────────
+              # "chrome-devtools-mcp" → "chrome-devtools" (strip -mcp, keep hyphens)
+              config_name() {
+                local bin="$1"
+                echo "''${bin%-mcp}"
+              }
 
               global_dir="$HOME/.lootbox"
               config_file="$global_dir/config.json"
@@ -202,57 +261,96 @@
                 echo "~/.lootbox/ dirs already exist"
               fi
 
-              # ── detect chrome-devtools-mcp ───────────────────────
-              cdp_cmd=""
+              # ── collect MCP servers ─────────────────────────────
+              # Parallel indexed arrays + a counter (avoids set -u issues
+              # with empty-array length expansion).
+              mcp_names=()
+              mcp_cmds=()
+              n_servers=0
 
-              # 1. On user PATH? (lootbox-full profile, npm -g, manual)
-              if command -v chrome-devtools-mcp >/dev/null 2>&1; then
-                cdp_cmd="chrome-devtools-mcp"
-                echo "detected: chrome-devtools-mcp on PATH"
+              add_server() {
+                local name="$1" cmd="$2"
+                mcp_names+=("$name")
+                mcp_cmds+=("$cmd")
+                n_servers=$((n_servers + 1))
+              }
 
-              # 2. In nix profile closure? (separate nix profile install)
-              elif [ -e "$HOME/.nix-profile" ] && command -v nix-store >/dev/null 2>&1; then
-                cdp_store="$(nix-store -qR "$HOME/.nix-profile" 2>/dev/null | grep chrome-devtools-mcp || true)"
-                if [ -n "$cdp_store" ] && [ -x "$cdp_store/bin/chrome-devtools-mcp" ]; then
-                  cdp_cmd="$cdp_store/bin/chrome-devtools-mcp"
-                  echo "detected: chrome-devtools-mcp in nix profile"
-                fi
+              # Autodetect known MCP binaries
+              if [ "$autodetect" = true ]; then
+                for bin in chrome-devtools-mcp; do
+                  if is_excluded "$bin"; then
+                    echo "excluded: $bin"
+                    continue
+                  fi
+                  cmd="$(detect_mcp_binary "$bin" || true)"
+                  if [ -n "$cmd" ]; then
+                    add_server "$(config_name "$bin")" "$cmd"
+                    echo "detected: $bin"
+                  fi
+                done
               fi
+
+              # Force-included binaries (always added, warn if not found)
+              for bin in "''${includes[@]+"''${includes[@]}"}"; do
+                if is_excluded "$bin"; then
+                  echo "excluded (overrides --include): $bin"
+                  continue
+                fi
+                cmd="$(detect_mcp_binary "$bin" || true)"
+                if [ -n "$cmd" ]; then
+                  add_server "$(config_name "$bin")" "$cmd"
+                  echo "included: $bin"
+                else
+                  echo "warning: --include $bin not found on PATH"
+                fi
+              done
 
               # ── generate config ─────────────────────────────────
               if [ -f "$config_file" ]; then
+                echo ""
                 echo "config already exists: $config_file"
 
-                if [ -n "$cdp_cmd" ]; then
-                  if ! grep -q chrome-devtools "$config_file" 2>/dev/null; then
-                    echo ""
-                    echo "hint: chrome-devtools-mcp available but not in config"
-                    echo "  add to server.mcpServers in $config_file:"
-                    echo "    \"chrome-devtools\": { \"command\": \"$cdp_cmd\", \"args\": [] }"
-                  fi
+                if [ "$n_servers" -gt 0 ]; then
+                  for (( i=0; i<n_servers; i++ )); do
+                    name="''${mcp_names[$i]}"
+                    if ! grep -q "\"$name\"" "$config_file" 2>/dev/null; then
+                      echo ""
+                      echo "hint: $name is available but not in your config."
+                      echo "  add to server.mcpServers in $config_file:"
+                      echo "    \"$name\": { \"command\": \"''${mcp_cmds[$i]}\", \"args\": [] }"
+                    fi
+                  done
                 fi
               else
-                if [ -n "$cdp_cmd" ]; then
-                  printf '%s\n' \
-                    '{' \
-                    '  "server": {' \
-                    '    "port": 3000,' \
-                    '    "mcpServers": {' \
-                    '      "chrome-devtools": {' \
-                    "        \"command\": \"$cdp_cmd\"," \
-                    '        "args": []' \
-                    '      }' \
-                    '    }' \
-                    '  }' \
-                    '}' > "$config_file"
+                # Build JSON with proper formatting
+                if [ "$n_servers" -gt 0 ]; then
+                  {
+                    echo '{'
+                    echo '  "server": {'
+                    echo '    "port": 3000,'
+                    echo '    "mcpServers": {'
+                    for (( i=0; i<n_servers; i++ )); do
+                      comma=","
+                      [ $((i + 1)) -eq "$n_servers" ] && comma=""
+                      echo "      \"''${mcp_names[$i]}\": {"
+                      echo "        \"command\": \"''${mcp_cmds[$i]}\","
+                      echo '        "args": []'
+                      echo "      }$comma"
+                    done
+                    echo '    }'
+                    echo '  }'
+                    echo '}'
+                  } > "$config_file"
                 else
-                  printf '%s\n' \
-                    '{' \
-                    '  "server": {' \
-                    '    "port": 3000' \
-                    '  }' \
-                    '}' > "$config_file"
+                  {
+                    echo '{'
+                    echo '  "server": {'
+                    echo '    "port": 3000'
+                    echo '  }'
+                    echo '}'
+                  } > "$config_file"
                 fi
+
                 echo "wrote $config_file"
               fi
 
