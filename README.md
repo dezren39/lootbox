@@ -340,7 +340,7 @@ for the full priority chain and advanced `hazmat.*` overrides.
 
 - `lootbox --help` - Human-friendly help
 - `lootbox --llm-help` - LLM-focused command reference
-- `lootbox --config-help` - Configuration documentation
+- `lootbox --config-help` - Configuration documentation (includes MCP health/multi-client)
 - `lootbox --version` - Show version number
 
 ## MCP Server Integration
