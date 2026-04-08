@@ -35,6 +35,46 @@
             && baseName != "lootbox"; # compiled binary in repo root
         };
 
+        # ── vendored chrome-devtools-mcp ─────────────────────────────
+        #
+        # The published npm package is a self-contained rollup bundle
+        # (all deps are devDeps — zero runtime npm deps).  We just need
+        # node + the tarball contents.
+        chrome-devtools-mcp = pkgs.stdenv.mkDerivation rec {
+          pname = "chrome-devtools-mcp";
+          version = "0.21.0";
+
+          src = pkgs.fetchurl {
+            url = "https://registry.npmjs.org/${pname}/-/${pname}-${version}.tgz";
+            hash = "sha256-KMHWSSctf6ihIT792yZeTqaYuHqmUanN2SJje5PI184=";
+          };
+
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+
+          unpackPhase = ''
+            mkdir -p $TMPDIR/pkg
+            tar xzf $src -C $TMPDIR/pkg --strip-components=1
+          '';
+
+          installPhase = ''
+            mkdir -p $out/lib/chrome-devtools-mcp $out/bin
+
+            cp -r $TMPDIR/pkg/build $out/lib/chrome-devtools-mcp/
+            cp $TMPDIR/pkg/package.json $out/lib/chrome-devtools-mcp/
+
+            # Wrapper script: runs the MCP server with node from the Nix store
+            makeWrapper ${pkgs.nodejs_22}/bin/node $out/bin/chrome-devtools-mcp \
+              --add-flags "$out/lib/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js"
+          '';
+
+          meta = with pkgs.lib; {
+            description = "MCP server for Chrome DevTools (vendored)";
+            homepage = "https://github.com/ChromeDevTools/chrome-devtools-mcp";
+            license = licenses.asl20;
+            mainProgram = "chrome-devtools-mcp";
+          };
+        };
+
         # ── package: compiled lootbox binary ─────────────────────────
         lootbox = pkgs.stdenv.mkDerivation {
           pname = "lootbox";
@@ -77,18 +117,63 @@
           };
         };
 
+        # ── lootbox-full: lootbox + vendored chrome-devtools-mcp ────
+        #
+        # Single install gives you `lootbox` and `chrome-devtools-mcp`
+        # on the same PATH.  lootbox can spawn the MCP server without
+        # the user ever running `npm i -g` or `npx`.
+        lootbox-full = pkgs.symlinkJoin {
+          name = "lootbox-full-${version}";
+          paths = [
+            lootbox
+            chrome-devtools-mcp
+          ];
+
+          # Provide a ready-made config snippet so users can drop it
+          # into their lootbox.config.json (or use --config).
+          postBuild = ''
+            mkdir -p $out/share/lootbox
+            cat > $out/share/lootbox/mcp-config.json <<EOF
+            {
+              "server": {
+                "mcpServers": {
+                  "chrome-devtools": {
+                    "command": "$out/bin/chrome-devtools-mcp",
+                    "args": []
+                  }
+                }
+              }
+            }
+            EOF
+          '';
+
+          meta = with pkgs.lib; {
+            description = "lootbox CLI with vendored chrome-devtools-mcp";
+            license = licenses.mit;
+            mainProgram = "lootbox";
+          };
+        };
+
       in
       {
         # ── packages ───────────────────────────────────────────────
         packages = {
           default = lootbox;
           lootbox = lootbox;
+          lootbox-full = lootbox-full;
+          inherit chrome-devtools-mcp;
         };
 
         # ── apps ───────────────────────────────────────────────────
         apps.default = {
           type = "app";
           program = "${lootbox}/bin/lootbox";
+        };
+
+        # Run the chrome-devtools-mcp server standalone
+        apps.chrome-devtools-mcp = {
+          type = "app";
+          program = "${chrome-devtools-mcp}/bin/chrome-devtools-mcp";
         };
 
         # Dev convenience: cache deps + compile in working tree
