@@ -186,7 +186,8 @@ export class WebSocketRpcServer {
     }, config.file_watch_debounce, config.tool_file_extension);
 
     // Phase 8: Start HTTP server
-    Deno.serve({ port, onListen: () => {} }, this.app.fetch);
+    // TODO: make hostname configurable (e.g. config.hostname ?? "localhost")
+    Deno.serve({ port, hostname: "localhost", onListen: () => {} }, this.app.fetch);
 
     // Give server time to start
     await new Promise((resolve) => setTimeout(resolve, config.server_start_delay));
