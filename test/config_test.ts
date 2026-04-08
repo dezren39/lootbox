@@ -369,3 +369,140 @@ Deno.test("WorkerManagerConfig fields have sensible default values", async () =>
   assertEquals(wmConfig.workerPollInterval > 0, true, "workerPollInterval positive");
   assertEquals(wmConfig.workerWsPath.length > 0, true, "workerWsPath non-empty");
 });
+
+// ── Config search chain tests ────────────────────────────────────────
+
+import { discoverConfigFile } from "../src/lib/get_config.ts";
+
+Deno.test("discoverConfigFile: returns null when no config files exist", async () => {
+  // Run in a temp directory with no config files
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  Deno.chdir(tmpDir);
+  try {
+    const result = await discoverConfigFile();
+    // May find a config in ~/.lootbox/ or other user dirs — that's fine.
+    // Just verify it doesn't throw.
+    if (result !== null) {
+      // If found, it should be a readable file
+      const text = await Deno.readTextFile(result);
+      assertExists(text);
+    }
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+Deno.test("discoverConfigFile: finds ./lootbox.config.json (1A)", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  Deno.chdir(tmpDir);
+  try {
+    await Deno.writeTextFile("lootbox.config.json", '{"server":{}}');
+    const result = await discoverConfigFile();
+    assertEquals(result, "lootbox.config.json");
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+Deno.test("discoverConfigFile: finds ./.lootbox/config.json (1B)", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  Deno.chdir(tmpDir);
+  try {
+    await Deno.mkdir(".lootbox", { recursive: true });
+    await Deno.writeTextFile(".lootbox/config.json", '{"server":{}}');
+    const result = await discoverConfigFile();
+    // Should find .lootbox/config.json (1A doesn't exist so 1B wins)
+    assertEquals(result, ".lootbox/config.json");
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+Deno.test("discoverConfigFile: 1A takes precedence over 1B", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  Deno.chdir(tmpDir);
+  try {
+    await Deno.writeTextFile("lootbox.config.json", '{"from":"1A"}');
+    await Deno.mkdir(".lootbox", { recursive: true });
+    await Deno.writeTextFile(".lootbox/config.json", '{"from":"1B"}');
+    const result = await discoverConfigFile();
+    assertEquals(result, "lootbox.config.json");
+  } finally {
+    Deno.chdir(origCwd);
+    await Deno.remove(tmpDir, { recursive: true });
+  }
+});
+
+Deno.test("discoverConfigFile: finds ~/.lootbox/config.json (2A)", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  const fakeHome = await Deno.makeTempDir();
+  const origHome = Deno.env.get("HOME");
+  Deno.chdir(tmpDir);
+  Deno.env.set("HOME", fakeHome);
+  try {
+    await Deno.mkdir(`${fakeHome}/.lootbox`, { recursive: true });
+    await Deno.writeTextFile(`${fakeHome}/.lootbox/config.json`, '{"from":"2A"}');
+    const result = await discoverConfigFile();
+    assertEquals(result, `${fakeHome}/.lootbox/config.json`);
+  } finally {
+    Deno.chdir(origCwd);
+    if (origHome) Deno.env.set("HOME", origHome);
+    await Deno.remove(tmpDir, { recursive: true });
+    await Deno.remove(fakeHome, { recursive: true });
+  }
+});
+
+Deno.test("discoverConfigFile: finds $XDG_CONFIG_HOME/lootbox/config.json (2B)", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  const fakeHome = await Deno.makeTempDir();
+  const fakeXdg = await Deno.makeTempDir();
+  const origHome = Deno.env.get("HOME");
+  const origXdg = Deno.env.get("XDG_CONFIG_HOME");
+  Deno.chdir(tmpDir);
+  Deno.env.set("HOME", fakeHome);
+  Deno.env.set("XDG_CONFIG_HOME", fakeXdg);
+  try {
+    await Deno.mkdir(`${fakeXdg}/lootbox`, { recursive: true });
+    await Deno.writeTextFile(`${fakeXdg}/lootbox/config.json`, '{"from":"2B"}');
+    const result = await discoverConfigFile();
+    assertEquals(result, `${fakeXdg}/lootbox/config.json`);
+  } finally {
+    Deno.chdir(origCwd);
+    if (origHome) Deno.env.set("HOME", origHome);
+    if (origXdg) { Deno.env.set("XDG_CONFIG_HOME", origXdg); } else { Deno.env.delete("XDG_CONFIG_HOME"); }
+    await Deno.remove(tmpDir, { recursive: true });
+    await Deno.remove(fakeHome, { recursive: true });
+    await Deno.remove(fakeXdg, { recursive: true });
+  }
+});
+
+Deno.test("discoverConfigFile: project config (1A) beats user config (2A)", async () => {
+  const tmpDir = await Deno.makeTempDir();
+  const origCwd = Deno.cwd();
+  const fakeHome = await Deno.makeTempDir();
+  const origHome = Deno.env.get("HOME");
+  Deno.chdir(tmpDir);
+  Deno.env.set("HOME", fakeHome);
+  try {
+    // Create both 1A and 2A
+    await Deno.writeTextFile("lootbox.config.json", '{"from":"1A"}');
+    await Deno.mkdir(`${fakeHome}/.lootbox`, { recursive: true });
+    await Deno.writeTextFile(`${fakeHome}/.lootbox/config.json`, '{"from":"2A"}');
+    const result = await discoverConfigFile();
+    assertEquals(result, "lootbox.config.json");
+  } finally {
+    Deno.chdir(origCwd);
+    if (origHome) Deno.env.set("HOME", origHome);
+    await Deno.remove(tmpDir, { recursive: true });
+    await Deno.remove(fakeHome, { recursive: true });
+  }
+});

@@ -79,8 +79,8 @@ export const DEFAULT_PERMISSION_FLAGS: readonly string[] = ["--allow-net"];
 
 // ── Path / route defaults ────────────────────────────────────────────
 /**
- * Config file name searched for in the current working directory
- * when no --config flag is supplied.
+ * Legacy config file name in the current working directory.
+ * First candidate in the config search chain (see get_config.ts discoverConfigFile).
  */
 export const DEFAULT_CONFIG_FILENAME = "lootbox.config.json";
 

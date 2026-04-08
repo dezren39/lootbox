@@ -5,7 +5,7 @@ import { join } from "https://deno.land/std@0.208.0/path/mod.ts";
 /**
  * Get the user's home directory
  */
-function getHomeDir(): string {
+export function getHomeDir(): string {
   const home = Deno.env.get("HOME") || Deno.env.get("USERPROFILE");
   if (!home) {
     throw new Error("Could not determine home directory");

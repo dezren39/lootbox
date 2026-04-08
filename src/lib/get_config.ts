@@ -17,8 +17,9 @@ import {
   getUserLootboxToolsDir,
   getUserLootboxWorkflowsDir,
   getUserLootboxScriptsDir,
+  getHomeDir,
 } from "./paths.ts";
-import { dirname } from "https://deno.land/std@0.208.0/path/mod.ts";
+import { dirname, join } from "https://deno.land/std@0.208.0/path/mod.ts";
 import {
   DEFAULT_PORT,
   DEFAULT_TIMEOUT_MS,
@@ -55,19 +56,109 @@ import {
 
 // ── Config file loading ──────────────────────────────────────────────
 
+/**
+ * Config file search chain (highest precedence first):
+ *
+ *   1A  ./lootbox.config.json              Project – legacy flat file in CWD
+ *   1B  ./.lootbox/config.json             Project – inside project lootbox dir
+ *   2A  ~/.lootbox/config.json             User preferred – best global spot
+ *   2B  $XDG_CONFIG_HOME/lootbox/config.json  User preferred – XDG-correct
+ *   2C  ~/.config/lootbox/config.json      User preferred – XDG fallback
+ *   3A  $XDG_DATA_HOME/lootbox/config.json User fallback – data dir (not ideal)
+ *   3B  ~/.local/share/lootbox/config.json User fallback – XDG data fallback
+ *   3C  ~/Library/Application Support/lootbox/config.json  macOS user fallback
+ *   4A  /usr/local/etc/lootbox/config.json System preferred – always writable
+ *   4B  /etc/lootbox/config.json           System fallback – may be read-only
+ *
+ * When --config is given explicitly, ONLY that path is used (error if missing).
+ * Otherwise we walk the chain and use the first file that exists.
+ * If nothing is found, return {} (all defaults).
+ */
+export async function discoverConfigFile(): Promise<string | null> {
+  const home = (() => {
+    try { return getHomeDir(); } catch { return null; }
+  })();
+
+  const candidates: string[] = [
+    // 1A – project: legacy flat file
+    DEFAULT_CONFIG_FILENAME,
+    // 1B – project: inside .lootbox dir
+    join(".lootbox", "config.json"),
+  ];
+
+  if (home) {
+    // 2A – user preferred: ~/.lootbox/
+    candidates.push(join(home, ".lootbox", "config.json"));
+
+    // 2B – user preferred: $XDG_CONFIG_HOME/lootbox/
+    const xdgConfigHome = Deno.env.get("XDG_CONFIG_HOME");
+    if (xdgConfigHome) {
+      candidates.push(join(xdgConfigHome, "lootbox", "config.json"));
+    }
+
+    // 2C – user preferred: ~/.config/lootbox/ (XDG fallback)
+    candidates.push(join(home, ".config", "lootbox", "config.json"));
+
+    // 3A – user fallback: $XDG_DATA_HOME/lootbox/
+    const xdgDataHome = Deno.env.get("XDG_DATA_HOME");
+    if (xdgDataHome) {
+      candidates.push(join(xdgDataHome, "lootbox", "config.json"));
+    }
+
+    if (Deno.build.os === "darwin") {
+      // 3C – macOS user fallback: ~/Library/Application Support/lootbox/
+      candidates.push(
+        join(home, "Library", "Application Support", "lootbox", "config.json"),
+      );
+    } else {
+      // 3B – user fallback: ~/.local/share/lootbox/ (Linux/Unix)
+      candidates.push(
+        join(home, ".local", "share", "lootbox", "config.json"),
+      );
+    }
+  }
+
+  // 4A – system preferred: /usr/local/etc/lootbox/
+  candidates.push(join("/usr", "local", "etc", "lootbox", "config.json"));
+
+  // 4B – system fallback: /etc/lootbox/
+  candidates.push(join("/etc", "lootbox", "config.json"));
+
+  for (const candidate of candidates) {
+    if (await exists(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 async function loadConfigFile(path?: string): Promise<Config> {
-  const filePath = path || DEFAULT_CONFIG_FILENAME;
-  try {
-    const text = await Deno.readTextFile(filePath);
-    return JSON.parse(text) as Config;
-  } catch {
-    // If an explicit --config was given and failed, that is an error.
-    if (path) {
-      console.error(`Error: could not read config file: ${filePath}`);
+  // Explicit --config: use only that path, error if it fails.
+  if (path) {
+    try {
+      const text = await Deno.readTextFile(path);
+      return JSON.parse(text) as Config;
+    } catch {
+      console.error(`Error: could not read config file: ${path}`);
       Deno.exit(1);
     }
-    return {};
   }
+
+  // Auto-discover: walk the search chain.
+  const discovered = await discoverConfigFile();
+  if (discovered) {
+    try {
+      const text = await Deno.readTextFile(discovered);
+      return JSON.parse(text) as Config;
+    } catch {
+      // File exists but is unreadable/invalid — warn but don't crash.
+      console.error(`Warning: found config at ${discovered} but could not parse it`);
+      return {};
+    }
+  }
+
+  return {};
 }
 
 // ── Permission parsing ───────────────────────────────────────────────
