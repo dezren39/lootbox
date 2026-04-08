@@ -118,12 +118,31 @@
         };
 
         # ── lootbox-full: lootbox + vendored chrome-devtools-mcp ────
+        #
+        # symlinkJoin merges both packages' bin/ dirs, and postBuild
+        # re-wraps the lootbox binary so chrome-devtools-mcp is always
+        # on its PATH — even when invoked via `nix run`, not just
+        # `nix profile install`.
         lootbox-full = pkgs.symlinkJoin {
           name = "lootbox-full-${version}";
           paths = [
             lootbox
             chrome-devtools-mcp
           ];
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+
+          postBuild = ''
+            # Re-wrap lootbox so it can always find chrome-devtools-mcp
+            # (the original wrapper only adds deno to PATH)
+            rm $out/bin/lootbox
+            makeWrapper ${lootbox}/bin/.lootbox-unwrapped $out/bin/lootbox \
+              --prefix PATH : ${
+                pkgs.lib.makeBinPath [
+                  pkgs.deno
+                  chrome-devtools-mcp
+                ]
+              }
+          '';
 
           meta = with pkgs.lib; {
             description = "lootbox CLI with vendored chrome-devtools-mcp";
